@@ -6,9 +6,10 @@ foto te zien is en worden filmpjes gewoon afgespeeld. De app is één bestand
 (`index.html`) en werkt zonder installatie. Op Windows download je één bestand,
 zet je het in je fotomap en dubbelklik je erop.
 
-**Privacy:** je bestanden blijven op je eigen computer. Er wordt niets
-geüpload; de browser toont ze rechtstreeks vanaf je schijf (via tijdelijke
-*object URLs*).
+**Privacy:** je foto's en filmpjes blijven op je eigen computer en worden
+nergens heen gestuurd. Alleen voor de plaatsnaam wordt de GPS-positie van een
+foto (de coördinaten, niet de foto) opgezocht bij OpenStreetMap; dat zet je uit
+met **Plek tonen** op het instellingenscherm.
 
 ## Gebruik op een Windows-pc
 
@@ -25,8 +26,9 @@ Toch uitvoeren* bij het openen).
 Hoe het werkt: in `Diavoorstelling.bat` zit de hele app. Bij dubbelklikken zet
 het de app in `%LOCALAPPDATA%\Diavoorstelling`, zoekt alle foto's en filmpjes
 in de map van het bestand (ook in submappen) en opent ze in Microsoft Edge
-(of Chrome) als los venster op volledig scherm. Er wordt niets in je fotomap
-gezet. Foto's toegevoegd? Dubbelklik opnieuw. `Esc` brengt je naar het
+(of Chrome) als los venster op volledig scherm. In je fotomap komt alleen iets
+bij als je een foto aanpast (bijschrift, plek of draaien): dan wordt eerst het
+origineel bewaard in de verborgen map `Diavoorstelling-originelen`. Foto's toegevoegd? Dubbelklik opnieuw. `Esc` brengt je naar het
 instellingenscherm, `Alt+F4` sluit af. Instellingen worden onthouden.
 
 ## Gebruik zonder startbestand
@@ -54,6 +56,43 @@ Bestanden worden op naam gesorteerd, met getallen in de goede volgorde
 | Scherm vullen | Snijdt foto's en filmpjes bij zodat er geen zwarte randen zijn. Staande beelden op een liggend scherm (en andersom) worden niet bijgesneden, zodat je ze helemaal ziet. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
 | Bewegende foto's | Foto's langzaam inzoomen en verschuiven (standaard uit). Ook tijdens de voorstelling aan/uit met `A` of de knop met het vergrootglas. |
 
+### Tekst bij een foto en foto's draaien
+
+Druk tijdens de voorstelling op `T` (of klik op het potloodje in de balk), typ
+een tekst, bijvoorbeeld *"zo nog even de tuin grasmaaien"*, en druk op
+`Enter`. Met `R` (of de draaiknop) draai je een foto een kwartslag rechtsom.
+
+Tekst en draaistand worden **in de foto zelf** opgeslagen (in de
+EXIF-metadata). Zo blijven ze bij de foto, ook als je hem kopieert. In
+Windows zie je de tekst bij *Eigenschappen → Details → Titel*. De beeldkwaliteit
+verandert niet: alleen de metadata wordt aangepast, en camera, datum en
+GPS-gegevens blijven behouden. De datum van het bestand blijft ook gelijk.
+
+- **Reservekopie:** voor de eerste wijziging aan een foto wordt het origineel
+  bewaard in de verborgen map `Diavoorstelling-originelen` in de fotomap.
+- **Alleen JPG-foto's** (bijna alle camera- en telefoonfoto's). Bij filmpjes en
+  andere bestanden legt de app uit dat het niet kan.
+- **Alleen via `Diavoorstelling.bat`:** een browser mag zelf geen bestanden
+  aanpassen. Het startbestand start daarom op de achtergrond een klein
+  hulpprogramma dat alleen vanaf deze computer bereikbaar is (127.0.0.1, met
+  een geheime sleutel) en alleen JPG-bestanden in de fotomap mag aanpassen. Het
+  stopt vanzelf als de voorstelling dicht is. In de online versie worden
+  teksten wel getoond, maar niet opgeslagen.
+
+### Plek
+
+Heeft een foto GPS-gegevens (de meeste telefoonfoto's), dan staat onder in
+beeld waar hij gemaakt is, bijvoorbeeld *📍 Utrecht*. De plaatsnaam wordt
+opgezocht bij [OpenStreetMap](https://www.openstreetmap.org/); alleen de
+coördinaten worden verstuurd, niet de foto. Opgezochte namen worden onthouden.
+Met `P` (of de speld in de balk) pas je de plek zelf aan; die wordt in de foto
+opgeslagen (Windows: *Onderwerp*). Leegmaken zet de plaatsnaam uit de
+GPS-gegevens terug.
+
+Op het instellingenscherm zet je los van elkaar aan of uit:
+**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht) en
+**Bestandsnaam tonen** (linksboven, standaard uit).
+
 Instellingen worden onthouden in de browser (`localStorage`).
 
 ## Bediening
@@ -70,13 +109,24 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `S` | Willekeurige volgorde aan/uit |
 | `A` | Bewegende foto's aan/uit |
 | `V` | Scherm vullen aan/uit |
-| `G` | Miniatuuroverzicht openen/sluiten |
+| `T` | Bijschrift bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
+| `P` | Plek aanpassen (wordt in de foto opgeslagen) |
+| `R` | Foto een kwartslag rechtsom draaien (wordt in de foto opgeslagen) |
+| `G` | Overzicht openen/sluiten: alle foto's per map, met zoekvak; klik opent een foto in pauze om te bewerken |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
 
 Beweeg de muis om de bedieningsbalk te tonen (met o.a. een volumeschuif); als
-de muis stilstaat verdwijnt hij weer. In het **miniatuuroverzicht** klik je op
-een miniatuur om naar die dia te springen; miniaturen worden pas geladen als ze
-in beeld komen.
+de muis stilstaat verdwijnt hij weer. 
+
+### Een foto zoeken en bewerken
+
+Het **overzicht** (`G`, de knop met de vier vakjes, of **Foto zoeken en
+bewerken** op het instellingenscherm) toont alle foto's en filmpjes, per map.
+Typ in het zoekvak een deel van de naam of de map (bijvoorbeeld *strand* of
+*2024*). Klik op een foto (of druk `Enter` voor de eerste treffer): die opent
+**in pauze**, zodat je meteen een bijschrift (`T`), plek (`P`) of draaiing (`R`)
+kunt geven. `Spatie` laat de voorstelling weer lopen. Miniaturen worden pas
+geladen als ze in beeld komen.
 
 ## Goed om te weten
 
@@ -116,7 +166,7 @@ npx playwright install chromium
 npm test
 ```
 
-De tests staan in `tests/slideshow.spec.js` en maken hun testfoto's en
+De tests staan in `tests/` (`slideshow.spec.js`, `metadata.spec.js`; `windows.spec.js` voert op Windows het echte `Diavoorstelling.bat` uit met Edge) en maken hun testfoto's en
 -filmpjes zelf aan met ffmpeg in een tijdelijke map, dus ffmpeg moet
 geïnstalleerd zijn. Op GitHub draaien ze automatisch via
 `.github/workflows/test.yml`.

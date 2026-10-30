@@ -25,7 +25,7 @@
     overflow: hidden;
     user-select: none;
   }
-  button, input, select { font: inherit; color: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
 
   /* ---------- Startscherm ---------- */
   #start {
@@ -144,8 +144,42 @@
     text-shadow: 0 1px 3px #000;
     font-size: 14px;
   }
-  #show.ui #info { opacity: 1; }
+  #show.show-name #info { opacity: 1; }
   #name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Plek en bijschrift: onderaan, groot en leesbaar; schuift omhoog als de balk zichtbaar is */
+  #overlay {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 48px 24px 28px;
+    text-align: center; pointer-events: none;
+    color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, .9);
+    background: linear-gradient(to top, rgba(0, 0, 0, .65), rgba(0, 0, 0, 0));
+    transition: padding-bottom .25s;
+  }
+  #overlay.empty { display: none; }
+  #show.ui #overlay { padding-bottom: calc(var(--bar-h, 64px) + 40px); }
+  #caption {
+    font-size: clamp(20px, 3vw, 42px); line-height: 1.3; font-weight: 600;
+    white-space: pre-line; overflow-wrap: anywhere;
+  }
+  #place { font-size: clamp(15px, 1.8vw, 24px); line-height: 1.3; margin-bottom: 4px; overflow-wrap: anywhere; }
+  #place::before { content: "\1F4CD\00A0"; }
+  #caption:empty, #place:empty { display: none; }
+
+  #captionEdit {
+    position: absolute; left: 50%; bottom: calc(var(--bar-h, 64px) + 40px); transform: translateX(-50%);
+    width: min(640px, calc(100% - 32px));
+    background: var(--panel-solid); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+  }
+  #captionEdit[hidden] { display: none; }
+  #captionEdit label { display: block; font-weight: 600; margin-bottom: 8px; }
+  #captionEdit small { display: block; color: var(--muted); margin-top: 6px; }
+  #captionInput {
+    width: 100%; resize: vertical; min-height: 64px; font-size: 20px;
+    padding: 10px; background: #09090b; border: 1px solid var(--border); border-radius: 8px;
+  }
+  #captionEdit .pick-row { justify-content: flex-end; margin-top: 12px; }
 
   #progress {
     position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
@@ -173,6 +207,17 @@
     padding: 10px 16px; border-bottom: 1px solid var(--border);
   }
   .grid-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+  #gridSearch {
+    flex: 1 1 auto; min-width: 0; max-width: 420px; padding: 8px 10px;
+    background: #09090b; border: 1px solid var(--border); border-radius: 8px;
+  }
+  .grid-folder {
+    grid-column: 1 / -1; margin: 10px 0 0; font-size: 14px; font-weight: 600; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .grid-folder:first-child { margin-top: 0; }
+  .grid-folder[hidden], .thumb[hidden] { display: none; }
+  #gridEmpty { margin: 24px 16px; color: var(--muted); }
   #gridItems {
     flex: 1; overflow-y: auto; overflow-x: hidden;
     padding: 16px;
@@ -207,7 +252,7 @@
 <section id="start">
   <div class="card">
     <h1>Diavoorstelling</h1>
-    <p class="sub">Foto's en filmpjes van je eigen computer. Er wordt niets geüpload.</p>
+    <p class="sub">Foto's en filmpjes van je eigen computer. Ze worden nergens heen gestuurd.</p>
 
     <div id="drop">
       Sleep foto's, filmpjes of een map hierheen
@@ -258,16 +303,35 @@
         </label>
         <input type="checkbox" id="kenburns">
       </div>
+      <div class="setting">
+        <label for="captions">Bijschrift tonen
+          <small>Een bijschrift zet je tijdens de voorstelling met <kbd>T</kbd> of het potloodje; het wordt in de JPG-foto zelf opgeslagen</small>
+        </label>
+        <input type="checkbox" id="captions">
+      </div>
+      <div class="setting">
+        <label for="showPlace">Plek tonen
+          <small>Waar de foto gemaakt is, uit de GPS-gegevens. De plaatsnaam wordt opgezocht bij OpenStreetMap (alleen de co&ouml;rdinaten worden verstuurd). Aanpassen met <kbd>P</kbd> of de speld in de balk.</small>
+        </label>
+        <input type="checkbox" id="showPlace">
+      </div>
+      <div class="setting">
+        <label for="showName">Bestandsnaam tonen
+          <small>De naam van de foto linksboven in beeld</small>
+        </label>
+        <input type="checkbox" id="showName">
+      </div>
     </div>
 
     <div class="pick-row">
       <button class="btn primary" id="startBtn" type="button" disabled>Diavoorstelling starten</button>
+      <button class="btn" id="browseBtn" type="button" disabled>Foto zoeken en bewerken</button>
     </div>
 
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>T</kbd> bijschrift &nbsp; <kbd>P</kbd> plek &nbsp; <kbd>R</kbd> draaien &nbsp; <kbd>G</kbd> overzicht &nbsp;
       <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> instellingen
     </div>
   </div>
@@ -278,8 +342,22 @@
   <div class="slide" id="slideA"></div>
   <div class="slide" id="slideB"></div>
 
+  <div id="overlay" class="empty" aria-live="polite">
+    <div id="place"></div>
+    <div id="caption"></div>
+  </div>
   <div id="info"><span id="name"></span></div>
   <div id="toast" role="status" aria-live="polite"></div>
+
+  <form id="captionEdit" hidden>
+    <label for="captionInput"><span id="editTitle">Bijschrift bij deze foto</span> <small style="display:inline;font-weight:400">(wordt in de foto opgeslagen)</small></label>
+    <textarea id="captionInput" rows="2" maxlength="300" placeholder="Bijvoorbeeld: zo nog even de tuin grasmaaien"></textarea>
+    <small id="editHint">Enter = opslaan &nbsp;·&nbsp; Esc = annuleren &nbsp;·&nbsp; leeg laten = tekst weghalen</small>
+    <div class="pick-row">
+      <button type="button" class="btn" id="captionCancel">Annuleren</button>
+      <button type="submit" class="btn primary">Opslaan</button>
+    </div>
+  </form>
   <div id="progress"></div>
 
   <div id="bar">
@@ -299,6 +377,15 @@
     <div class="sep"></div>
     <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    </button>
+    <button class="icon" id="rotateBtn" type="button" title="Foto draaien (R)" aria-label="Foto een kwartslag rechtsom draaien">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.55 5.55 11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11a7.906 7.906 0 0 0-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42 1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
+    </button>
+    <button class="icon" id="placeBtn" type="button" title="Plek aanpassen (P)" aria-label="Plek aanpassen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+    </button>
+    <button class="icon" id="captionBtn" type="button" title="Tekst bij deze foto (T)" aria-label="Tekst bij deze foto">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
     </button>
     <button class="icon" id="fillBtn" type="button" title="Scherm vullen (V)" aria-label="Scherm vullen" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2zM7 7h10v10H7z"/></svg>
@@ -325,11 +412,13 @@
   <div id="grid" role="dialog" aria-modal="true" aria-labelledby="gridTitle" hidden>
     <div class="grid-head">
       <h2 id="gridTitle">Overzicht</h2>
+      <input type="search" id="gridSearch" placeholder="Zoek op naam of map…" aria-label="Zoek op naam of map" autocomplete="off">
       <button class="icon" id="gridClose" type="button" title="Sluiten (Esc)" aria-label="Overzicht sluiten">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
     <div id="gridItems"></div>
+    <p id="gridEmpty" hidden>Niets gevonden.</p>
   </div>
 </section>
 
@@ -359,7 +448,7 @@
   const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, volume: 1 };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showName: false, volume: 1 };
   const settings = { ...defaults };
   const clampSeconds = (v) => {
     const n = v === '' || v === null ? NaN : Math.round(Number(v));
@@ -379,7 +468,7 @@
   if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns'];
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showName'];
   function syncStartControls() {
     $('seconds').value = settings.seconds;
     $('videoMode').value = settings.videoMode;
@@ -480,15 +569,18 @@
     else if (!usable.length) text += '.';
     $('count').textContent = text;
     $('startBtn').disabled = !usable.length;
+    $('browseBtn').disabled = !usable.length;
   }
 
   async function setFiles(files) {
     const gen = ++loadGen;
+    metaCache.clear();
     revokeAllSlideUrls();
     media = [];
     source = 'bestanden';
     const list = [...files].map((file) => ({ file, path: pathOf(file), type: kindOf(file) })).filter((m) => m.type);
     $('startBtn').disabled = true;
+    $('browseBtn').disabled = true;
     if (list.length) $('count').textContent = 'Bestanden controleren…';
     const ok = await filterSupported(list, gen);
     if (gen !== loadGen) return;
@@ -509,6 +601,7 @@
     ? window.DIASHOW_BASE.replace(/\/?$/, '/') : '';
   async function setList(paths) {
     const gen = ++loadGen;
+    metaCache.clear();
     revokeAllSlideUrls();
     source = 'lijst';
     const all = paths.filter((p) => typeof p === 'string' && p.trim())
@@ -600,12 +693,15 @@
   let token = 0;
   let preloadImg = null;
 
+  // Bestand uit de lijst; na een wijziging (draaien) met versienummer, zodat de browser hem opnieuw laadt
+  const srcOf = (m) => (m.version ? `${m.src}?v=${m.version}` : m.src);
+
   // Object-URL's voor dia's (los van die van de miniaturen)
   const slideUrls = new Map(); // media-index -> url
   // Weergave-URL: relatieve URL uit de lijst (nooit intrekken) of een eigen object-URL
   function urlOf(idx) {
     const m = media[idx];
-    if (m.src) return m.src;
+    if (m.src) return srcOf(m);
     let u = slideUrls.get(idx);
     if (!u) { u = URL.createObjectURL(m.file); slideUrls.set(idx, u); }
     return u;
@@ -665,6 +761,7 @@
     $('start').classList.add('hidden');
     show.classList.add('active');
     show.classList.toggle('fill', settings.fill);
+    show.classList.toggle('show-name', settings.showName);
     $('barSeconds').value = settings.seconds;
     $('volume').value = settings.volume;
     updateButtons();
@@ -674,7 +771,13 @@
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
 
+  let showGen = 0; // verhoogd bij stoppen; lopende acties zien zo dat ze moeten ophouden
   function stop() {
+    showGen++;
+    $('captionEdit').hidden = true;
+    $('caption').textContent = '';
+    $('place').textContent = '';
+    updateOverlay();
     clearTimer();
     token++;
     clearTimeout(clickTimer);
@@ -852,6 +955,7 @@
     currentVideo = m.type === 'video' ? el : null;
     $('name').textContent = nameOf(m);
     $('pos').textContent = `${pos + 1} / ${order.length}`;
+    showCaption();
 
     if (currentVideo) {
       const v = currentVideo;
@@ -1031,6 +1135,460 @@
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
   }
 
+  // ---------- JPEG-metadata (EXIF): tekst en draaistand in de foto zelf ----------
+  // Alleen de metadata verandert; de beeldgegevens blijven byte voor byte gelijk.
+  // Bestaande gegevens (camera, datum, GPS, fabrikantgegevens) worden nooit verplaatst:
+  // bij een wijziging komt een nieuwe kopie van de eerste EXIF-lijst (IFD0) achteraan,
+  // en wijst de kop daarheen. Zo blijven alle bestaande verwijzingen geldig.
+  const Exif = (() => {
+    const ORIENT = 0x0112, DESC = 0x010E, XPTITLE = 0x9C9B, XPSUBJECT = 0x9C9F, GPS = 0x8825;
+    const SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
+    // Teksten die camera's zelf invullen; die tonen we niet als bijschrift
+    const JUNK = /^(OLYMPUS DIGITAL CAMERA|SONY DSC|DIGITAL CAMERA|KONICA MINOLTA DIGITAL CAMERA|default|Default|image|Image|DCIM|\s*)$/;
+
+    function segments(b) {
+      if (b[0] !== 0xFF || b[1] !== 0xD8) throw new Error('Geen JPG-bestand');
+      let p = 2, insertAt = 2;
+      while (p + 4 <= b.length && b[p] === 0xFF) {
+        const marker = b[p + 1];
+        if (marker === 0xFF) { p++; continue; }
+        if (marker === 0xDA || marker === 0xD9) break;
+        const len = (b[p + 2] << 8) | b[p + 3];
+        if (len < 2) break;
+        if (marker === 0xE1 && len >= 16 && b[p + 4] === 0x45 && b[p + 5] === 0x78 && b[p + 6] === 0x69 &&
+            b[p + 7] === 0x66 && b[p + 8] === 0 && b[p + 9] === 0) {
+          return { seg: p, segEnd: Math.min(b.length, p + 2 + len), tiff: p + 10, insertAt };
+        }
+        if (marker === 0xE0 && p === 2) insertAt = p + 2 + len; // na JFIF-kop invoegen
+        p += 2 + len;
+      }
+      return { seg: -1, insertAt };
+    }
+
+    function parse(b, info) {
+      const dv = new DataView(b.buffer, b.byteOffset + info.tiff, info.segEnd - info.tiff);
+      const bo = dv.getUint16(0);
+      if (bo !== 0x4949 && bo !== 0x4D4D) throw new Error('Onbekende EXIF-kop');
+      const le = bo === 0x4949;
+      if (dv.getUint16(2, le) !== 42) throw new Error('Onbekende EXIF-kop');
+      const ifd = dv.getUint32(4, le);
+      const n = dv.getUint16(ifd, le);
+      const entries = [];
+      for (let i = 0; i < n; i++) {
+        const o = ifd + 2 + i * 12;
+        entries.push({ tag: dv.getUint16(o, le), type: dv.getUint16(o + 2, le), count: dv.getUint32(o + 4, le), at: o });
+      }
+      return { dv, le, ifd, entries, next: dv.getUint32(ifd + 2 + n * 12, le) };
+    }
+
+    function valueOf(t, e) {
+      const size = (SIZE[e.type] || 1) * e.count;
+      const off = size <= 4 ? e.at + 8 : t.dv.getUint32(e.at + 8, t.le);
+      return new Uint8Array(t.dv.buffer, t.dv.byteOffset + off, size);
+    }
+
+    // GPS-positie (graden) uit de GPS-lijst, of null
+    function readGps(t, ptr) {
+      const dv = t.dv, le = t.le;
+      const n = dv.getUint16(ptr, le);
+      const tags = {};
+      for (let i = 0; i < n; i++) {
+        const o = ptr + 2 + i * 12;
+        tags[dv.getUint16(o, le)] = { type: dv.getUint16(o + 2, le), count: dv.getUint32(o + 4, le), at: o };
+      }
+      const ref = (tag) => (tags[tag] ? String.fromCharCode(dv.getUint8(tags[tag].at + 8)) : '');
+      const deg = (tag) => {
+        const e = tags[tag];
+        if (!e || e.type !== 5 || e.count < 3) return null;
+        const off = dv.getUint32(e.at + 8, le);
+        let v = 0;
+        for (let i = 0; i < 3; i++) {
+          const num = dv.getUint32(off + i * 8, le), den = dv.getUint32(off + i * 8 + 4, le);
+          if (!den) return i ? v : null;
+          v += num / den / [1, 60, 3600][i];
+        }
+        return v;
+      };
+      let lat = deg(2), lon = deg(4);
+      if (lat == null || lon == null || (lat === 0 && lon === 0)) return null;
+      if (ref(1) === 'S') lat = -lat;
+      if (ref(3) === 'W') lon = -lon;
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+      return { lat, lon };
+    }
+
+    function read(b) {
+      const out = { caption: '', place: '', gps: null, orientation: 1, hasExif: false };
+      const info = segments(b);
+      if (info.seg < 0) return out;
+      const t = parse(b, info);
+      out.hasExif = true;
+      let desc = '', xp = '';
+      for (const e of t.entries) {
+        try {
+          if (e.tag === ORIENT && e.type === 3) out.orientation = t.dv.getUint16(e.at + 8, t.le) || 1;
+          else if (e.tag === XPTITLE) xp = new TextDecoder('utf-16le').decode(valueOf(t, e));
+          else if (e.tag === XPSUBJECT) out.place = new TextDecoder('utf-16le').decode(valueOf(t, e));
+          else if (e.tag === GPS && e.type === 4) out.gps = readGps(t, t.dv.getUint32(e.at + 8, t.le));
+          else if (e.tag === DESC) desc = new TextDecoder('utf-8').decode(valueOf(t, e));
+        } catch {}
+      }
+      const clean = (v) => v.replace(/\0+$/g, '').replace(/\0/g, '').trim();
+      xp = clean(xp); desc = clean(desc); out.place = clean(out.place);
+      out.caption = xp || (JUNK.test(desc) ? '' : desc);
+      return out;
+    }
+
+    const ucs2 = (text) => {
+      const out = new Uint8Array(text.length * 2 + 2);
+      for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); out[i * 2] = c & 0xFF; out[i * 2 + 1] = c >> 8; }
+      return out;
+    };
+
+    // changes: { caption?: string, place?: string ('' = weghalen), orientation?: 1..8 }
+    function write(b, changes) {
+      const info = segments(b);
+      const setCaption = typeof changes.caption === 'string';
+      const caption = setCaption ? changes.caption.trim() : '';
+      const setPlace = typeof changes.place === 'string';
+      const place = setPlace ? changes.place.trim() : '';
+      const orient = changes.orientation;
+
+      let le = true, oldTiff = null, fullTiff = null, keep = [], t = null;
+      if (info.seg >= 0) {
+        t = parse(b, info);
+        le = t.le;
+        // Snelle weg: alleen de draaistand, en die staat er al: twee bytes aanpassen
+        const o = t.entries.find((e) => e.tag === ORIENT && e.type === 3 && e.count === 1);
+        if (!setCaption && !setPlace && orient && o) {
+          const copy = b.slice();
+          new DataView(copy.buffer, copy.byteOffset + info.tiff).setUint16(o.at + 8, orient, le);
+          return copy;
+        }
+        fullTiff = b.subarray(info.tiff, info.segEnd);
+        keep = t.entries.filter((e) => !(setCaption && (e.tag === DESC || e.tag === XPTITLE)) &&
+          !(setPlace && e.tag === XPSUBJECT) && !(orient && e.tag === ORIENT));
+        // Ruimte terugwinnen: staat IFD0 al achteraan (door een eerdere wijziging) en wijst geen
+        // andere lijst (Exif, GPS, voorbeeldafbeelding) naar die plek of daarna, dan mag alles
+        // vanaf IFD0 weg; waarden die daar stonden en blijven, verhuizen mee naar achteren.
+        // Zo groeit de metadata niet bij elke wijziging. Anders blijft alles staan.
+        const POINTERS = [0x8769, 0x8825, 0xA005, 0x0201];
+        const below = (v) => v < t.ifd;
+        const outOfLine = (e) => (SIZE[e.type] || 1) * e.count > 4;
+        const reclaim = t.ifd > 8 && below(t.next) &&
+          keep.every((e) => !POINTERS.includes(e.tag) || below(t.dv.getUint32(e.at + 8, le)));
+        if (reclaim) {
+          keep = keep.map((e) => {
+            if (POINTERS.includes(e.tag) || !outOfLine(e) || below(t.dv.getUint32(e.at + 8, le))) return e;
+            return { ...e, move: valueOf(t, e).slice() }; // waarde meenemen
+          });
+        }
+        oldTiff = reclaim ? fullTiff.subarray(0, t.ifd) : fullTiff;
+      }
+
+      // Nieuwe waarden
+      const added = [];
+      if (orient) added.push({ tag: ORIENT, type: 3, count: 1, data: null, short: orient });
+      if (setCaption && caption) {
+        // Klassiek veld: alleen gewone tekens (andere programma's lezen het niet als UTF-8);
+        // de exacte tekst met accenten staat in XPTitle (dat leest Windows als 'Titel')
+        const ascii = caption.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+          .replace(/[^\x20-\x7e]/g, '?');
+        const desc = new Uint8Array(ascii.length + 1);
+        for (let i = 0; i < ascii.length; i++) desc[i] = ascii.charCodeAt(i);
+        added.push({ tag: DESC, type: 2, count: desc.length, data: desc });
+        const xp = ucs2(caption);
+        added.push({ tag: XPTITLE, type: 1, count: xp.length, data: xp });
+      }
+      // Plek die je zelf invult: XPSubject (Windows: 'Onderwerp')
+      if (setPlace && place) {
+        const xs = ucs2(place);
+        added.push({ tag: XPSUBJECT, type: 1, count: xs.length, data: xs });
+      }
+
+      const base = oldTiff ? oldTiff.length : 8;
+      const ifdAt = base + (base & 1); // even beginnen
+      const all = [
+        ...keep.map((e) => (e.move ? { tag: e.tag, add: { tag: e.tag, type: e.type, count: e.count, data: e.move } } : { tag: e.tag, old: e })),
+        ...added.map((e) => ({ tag: e.tag, add: e })),
+      ].sort((x, y) => x.tag - y.tag);
+      const ifdLen = 2 + all.length * 12 + 4;
+      let dataAt = ifdAt + ifdLen;
+      const extra = [];
+      const total = () => dataAt;
+      for (const x of all) {
+        if (x.add && x.add.data && x.add.data.length > 4) {
+          x.add.offset = dataAt;
+          extra.push({ at: dataAt, data: x.add.data });
+          dataAt += x.add.data.length + (x.add.data.length & 1);
+        }
+      }
+      const tiff = new Uint8Array(total());
+      const dv = new DataView(tiff.buffer);
+      if (oldTiff) tiff.set(oldTiff, 0);
+      else { dv.setUint16(0, 0x4949); dv.setUint16(2, 42, true); }
+      dv.setUint32(4, ifdAt, le);
+      dv.setUint16(ifdAt, all.length, le);
+      all.forEach((x, i) => {
+        const o = ifdAt + 2 + i * 12;
+        if (x.old) {
+          // Ongewijzigd overnemen: tag, type, aantal en waarde/verwijzing zoals ze waren
+          tiff.set(fullTiff.subarray(x.old.at, x.old.at + 12), o);
+        } else {
+          const e = x.add;
+          dv.setUint16(o, e.tag, le); dv.setUint16(o + 2, e.type, le); dv.setUint32(o + 4, e.count, le);
+          if (e.data == null) dv.setUint16(o + 8, e.short, le);
+          else if (e.data.length <= 4) tiff.set(e.data, o + 8);
+          else dv.setUint32(o + 8, e.offset, le);
+        }
+      });
+      dv.setUint32(ifdAt + 2 + all.length * 12, t ? t.next : 0, le);
+      for (const x of extra) tiff.set(x.data, x.at);
+
+      const segLen = 2 + 6 + tiff.length;
+      if (segLen > 0xFFFF) throw new Error('De metadata van deze foto is te groot');
+      const head = new Uint8Array([0xFF, 0xE1, segLen >> 8, segLen & 0xFF, 0x45, 0x78, 0x69, 0x66, 0, 0]);
+      const before = info.seg >= 0 ? b.subarray(0, info.seg) : b.subarray(0, info.insertAt);
+      const after = info.seg >= 0 ? b.subarray(info.segEnd) : b.subarray(info.insertAt);
+      const out = new Uint8Array(before.length + head.length + tiff.length + after.length);
+      out.set(before, 0);
+      out.set(head, before.length);
+      out.set(tiff, before.length + head.length);
+      out.set(after, before.length + head.length + tiff.length);
+      return out;
+    }
+
+    // Draaistand na een kwartslag rechtsom (ook voor gespiegelde standen)
+    const ROTATE_RIGHT = { 1: 6, 2: 7, 3: 8, 4: 5, 5: 2, 6: 3, 7: 4, 8: 1 };
+    return { read, write, rotateRight: (o) => ROTATE_RIGHT[o] || 6 };
+  })();
+
+  // ---------- Tekst en draaien: lezen uit en schrijven naar de foto ----------
+  // Schrijven kan alleen via het hulpprogramma van Diavoorstelling.bat (een browser mag zelf
+  // geen bestanden aanpassen). Lezen kan ook bij zelf gekozen bestanden.
+  const helper = typeof window.DIASHOW_SERVER === 'string' && typeof window.DIASHOW_TOKEN === 'string'
+    ? { url: window.DIASHOW_SERVER.replace(/\/$/, ''), token: window.DIASHOW_TOKEN } : null;
+  const isJpeg = (m) => !!m && m.type === 'image' && /\.(jpe?g|jfif)$/i.test(m.path);
+  const canWrite = (m) => isJpeg(m) && !!helper && source === 'lijst';
+  const helperUrl = (what, m, extra = '') =>
+    `${helper.url}/${what}?token=${encodeURIComponent(helper.token)}${m ? `&pad=${encodeURIComponent(m.path)}` : ''}${extra}`;
+  // Houdt het hulpprogramma in leven zolang de voorstelling open is
+  if (helper) setInterval(() => { fetch(helperUrl('ping')).catch(() => {}); }, 30000);
+
+  const metaCache = new Map(); // bestand -> gelezen metadata
+  // Zelf gekozen bestanden kunnen dezelfde naam hebben (IMG_0001.JPG uit twee mappen)
+  const metaKey = (m) => (m.file ? `${m.path}|${m.file.size}|${m.file.lastModified}` : m.path);
+  async function helperFetch(url, opts) {
+    try { return await fetch(url, opts); } catch {
+      throw new Error('het hulpprogramma reageert niet. Sluit de diavoorstelling en dubbelklik opnieuw op Diavoorstelling.bat');
+    }
+  }
+  async function fileBytes(m, headOnly) {
+    if (m.file) {
+      const part = headOnly ? m.file.slice(0, 256 * 1024) : m.file;
+      return new Uint8Array(await part.arrayBuffer());
+    }
+    if (!helper) return null;
+    const r = await helperFetch(helperUrl('bestand', m, headOnly ? '&kop=1' : ''), { cache: 'no-store' });
+    if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+  async function metaOf(m) {
+    if (!isJpeg(m)) return null;
+    if (metaCache.has(metaKey(m))) return metaCache.get(metaKey(m));
+    let meta = null;
+    try {
+      const b = await fileBytes(m, true);
+      if (b) meta = Exif.read(b);
+    } catch {}
+    if (meta) metaCache.set(metaKey(m), meta);
+    return meta;
+  }
+
+  // De foto die echt in beeld is (tijdens het laden van de volgende is pos al verder)
+  const currentMedia = () => (shownIdx >= 0 ? media[shownIdx] || null : null);
+  const updateOverlay = () => $('overlay').classList.toggle('empty', !$('caption').textContent && !$('place').textContent);
+
+  // ---------- Plaatsnaam uit GPS (OpenStreetMap), onthouden per plek ----------
+  const PLACES_KEY = 'diashow-plaatsnamen';
+  let placeNames = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLACES_KEY) || '{}');
+    if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') placeNames[k] = v;
+  } catch {}
+  const placePending = new Map();
+  let lookupChain = Promise.resolve();
+  function lookupPlace(gps) {
+    const key = `${gps.lat.toFixed(3)},${gps.lon.toFixed(3)}`;
+    if (key in placeNames) return Promise.resolve(placeNames[key]);
+    if (placePending.has(key)) return placePending.get(key);
+    // Eén verzoek tegelijk en niet vaker dan eens per seconde (regels van OpenStreetMap)
+    const job = lookupChain.then(async () => {
+      const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&addressdetails=1&accept-language=nl' +
+        `&lat=${gps.lat.toFixed(5)}&lon=${gps.lon.toFixed(5)}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      const a = j.address || {};
+      const city = a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || a.county || a.state || '';
+      const name = city
+        ? (a.country_code && a.country_code !== 'nl' && a.country ? `${city}, ${a.country}` : city)
+        : (a.country || j.name || '');
+      placeNames[key] = name;
+      try { localStorage.setItem(PLACES_KEY, JSON.stringify(placeNames)); } catch {}
+      return name;
+    });
+    lookupChain = job.catch(() => {}).then(() => new Promise((res) => setTimeout(res, 1100)));
+    const result = job.catch(() => '').finally(() => placePending.delete(key));
+    placePending.set(key, result);
+    return result;
+  }
+  // Zelf ingevulde plek gaat voor; anders de plaatsnaam bij de GPS-positie
+  async function placeOf(meta) {
+    if (!meta) return '';
+    if (meta.place) return meta.place;
+    return meta.gps ? lookupPlace(meta.gps) : '';
+  }
+
+  async function showCaption() {
+    const m = currentMedia();
+    const c = $('caption'), pl = $('place');
+    c.textContent = ''; pl.textContent = '';
+    updateOverlay();
+    if (!settings.captions && !settings.showPlace) return;
+    const meta = await metaOf(m);
+    if (m !== currentMedia()) return;
+    c.textContent = settings.captions && meta ? meta.caption : '';
+    updateOverlay();
+    if (!settings.showPlace) return;
+    const place = await placeOf(meta);
+    if (m !== currentMedia()) return;
+    pl.textContent = place;
+    updateOverlay();
+  }
+
+  // Waarom tekst/draaien hier niet kan, of '' als het wel kan
+  function whyNotWritable(m) {
+    if (!m) return 'Geen foto';
+    if (!isJpeg(m)) return "Bijschrift, plek en draaien kan alleen bij JPG-foto's";
+    if (!canWrite(m)) return 'Opslaan in de foto kan alleen als je de diavoorstelling start met Diavoorstelling.bat';
+    return '';
+  }
+
+  // Wijzigingen één voor één wegschrijven (lezen, aanpassen, controleren, opslaan)
+  let writeQueue = Promise.resolve();
+  function changePhoto(m, changes) {
+    const job = writeQueue.then(async () => {
+      const bytes = await fileBytes(m, false);
+      const now = Exif.read(bytes);
+      const same = (typeof changes.caption !== 'string' || now.caption === changes.caption.trim()) &&
+        (typeof changes.place !== 'string' || now.place === changes.place.trim()) &&
+        (!changes.orientation || now.orientation === changes.orientation);
+      if (same) { metaCache.set(metaKey(m), now); return now; } // niets veranderd: bestand niet aanraken
+      const updated = Exif.write(bytes, changes);
+      const check = Exif.read(updated);
+      if (typeof changes.caption === 'string' && check.caption !== changes.caption.trim()) throw new Error('Controle mislukt');
+      if (changes.orientation && check.orientation !== changes.orientation) throw new Error('Controle mislukt');
+      if (typeof changes.place === 'string' && check.place !== changes.place.trim()) throw new Error('Controle mislukt');
+      const r = await helperFetch(helperUrl('bestand', m), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: updated });
+      if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
+      metaCache.set(metaKey(m), check);
+      m.version = (m.version || 0) + 1; // nieuwe versie laden (niet uit de cache)
+      return check;
+    });
+    writeQueue = job.catch(() => {});
+    return job;
+  }
+
+  let captionWasPlaying = false;
+  let editField = 'caption'; // 'caption' (bijschrift) of 'place' (plek)
+  let editTarget = null;     // de foto waarvoor het tekstvak geopend is
+  let editSession = 0;
+  const captionEditing = () => !$('captionEdit').hidden;
+  async function openCaptionEditor(field = 'caption') {
+    const m = currentMedia();
+    if (!m || captionEditing()) return;
+    const why = whyNotWritable(m);
+    if (why) { toast(why, 2500); return; }
+    editField = field;
+    editTarget = m;
+    const session = ++editSession;
+    captionWasPlaying = playing;
+    if (playing) pausePlayback();
+    pokeUI();
+    const isPlace = field === 'place';
+    $('editTitle').textContent = isPlace ? 'Plek waar deze foto gemaakt is' : 'Bijschrift bij deze foto';
+    $('editHint').textContent = isPlace
+      ? 'Enter = opslaan · Esc = annuleren · leeg laten = plek uit de GPS-gegevens gebruiken'
+      : 'Enter = opslaan · Esc = annuleren · leeg laten = tekst weghalen';
+    const input = $('captionInput');
+    input.placeholder = isPlace ? 'Bijvoorbeeld: Camping De Berk, Ommen' : 'Bijvoorbeeld: zo nog even de tuin grasmaaien';
+    input.rows = isPlace ? 1 : 2;
+    input.value = '';
+    $('captionEdit').hidden = false;
+    input.focus();
+    const meta = await metaOf(m);
+    // Plek: begin met wat nu getoond wordt (ook een opgezochte plaatsnaam), zodat je hem kunt aanpassen
+    const value = !meta ? '' : isPlace ? await placeOf(meta) : meta.caption;
+    // Alleen invullen als dit tekstvak nog open is en je nog niets getypt hebt
+    if (session !== editSession || !captionEditing() || input.value !== '') return;
+    input.value = value;
+    input.select();
+  }
+  async function closeCaptionEditor(saveIt) {
+    if (!captionEditing()) return;
+    const m = editTarget;
+    editTarget = null;
+    editSession++;
+    const gen = showGen;
+    const text = $('captionInput').value.trim();
+    $('captionEdit').hidden = true;
+    show.focus({ preventScroll: true });
+    if (saveIt && m) {
+      try {
+        if (editField === 'place') {
+          await changePhoto(m, { place: text });
+          if (text && !settings.showPlace) { settings.showPlace = true; save(); }
+          toast(text ? 'Plek opgeslagen in de foto' : 'Plek weggehaald');
+        } else {
+          await changePhoto(m, { caption: text });
+          if (text && !settings.captions) { settings.captions = true; save(); }
+          toast(text ? 'Tekst opgeslagen in de foto' : 'Tekst weggehaald');
+        }
+      } catch (err) {
+        toast(`Kon de foto niet opslaan: ${err.message}`, 4000);
+      }
+    }
+    if (gen !== showGen) return; // intussen gestopt
+    showCaption();
+    if (captionWasPlaying) resumePlayback();
+  }
+
+  async function rotatePhoto() {
+    const m = currentMedia();
+    const why = whyNotWritable(m);
+    if (why) { toast(why, 2500); return; }
+    // Niet doorschuiven terwijl we draaien
+    const wasPlaying = playing;
+    const gen = showGen;
+    if (playing) pausePlayback();
+    try {
+      const meta = await metaOf(m);
+      const next = Exif.rotateRight(meta ? meta.orientation : 1);
+      metaCache.set(metaKey(m), { ...(meta || { caption: '' }), orientation: next }); // snel nog eens drukken
+      await changePhoto(m, { orientation: next });
+      if (gen !== showGen) return; // intussen gestopt
+      if (m === currentMedia()) { pos = Math.max(0, order.indexOf(shownIdx)); display(0); } // opnieuw in de nieuwe stand
+      toast('Foto gedraaid');
+    } catch (err) {
+      metaCache.delete(metaKey(m));
+      toast(`Kon de foto niet draaien: ${err.message}`, 4000);
+    }
+    if (gen !== showGen) return;
+    if (wasPlaying) resumePlayback();
+  }
+
   function toggleFill() {
     settings.fill = !settings.fill;
     save();
@@ -1103,7 +1661,7 @@
     const m = media[Number(btn.dataset.idx)];
     if (!m || m.type !== 'image') return;
     const img = btn.querySelector('img');
-    if (m.src) { if (!img.getAttribute('src')) img.src = m.src; return; }
+    if (m.src) { if (!img.getAttribute('src')) img.src = srcOf(m); return; }
     const u = URL.createObjectURL(m.file);
     thumbUrls.set(btn, u);
     img.src = u;
@@ -1123,17 +1681,38 @@
 
   function openGrid() {
     if (gridOpen() || !order.length) return;
+    $('gridSearch').value = '';
     gridWasPlaying = playing;
     if (playing) pausePlayback();
     gridReturnFocus = document.activeElement;
     const frag = document.createDocumentFragment();
-    order.forEach((idx, p) => {
+    // Mapkoppen (alleen bij vaste volgorde en als er submappen zijn)
+    const folderOf = (m) => (m.path.includes('/') ? m.path.slice(0, m.path.lastIndexOf('/')) : '');
+    const withFolders = !settings.shuffle && order.some((idx) => folderOf(media[idx]) !== folderOf(media[order[0]]));
+    // Per map groeperen (in volgorde van eerste voorkomen), zodat elke map één kop heeft
+    const items = order.map((idx, p) => ({ idx, p }));
+    if (withFolders) {
+      const rank = new Map();
+      for (const it of items) { const f = folderOf(media[it.idx]); if (!rank.has(f)) rank.set(f, rank.size); }
+      items.sort((x, y) => rank.get(folderOf(media[x.idx])) - rank.get(folderOf(media[y.idx])) || x.p - y.p);
+    }
+    let lastFolder = null;
+    items.forEach(({ idx, p }) => {
       const m = media[idx];
+      if (withFolders && folderOf(m) !== lastFolder) {
+        lastFolder = folderOf(m);
+        const h = document.createElement('h3');
+        h.className = 'grid-folder';
+        h.dataset.folder = lastFolder;
+        h.textContent = lastFolder ? `\u{1F4C1} ${lastFolder}` : '\u{1F4C1} Deze map';
+        frag.appendChild(h);
+      }
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'thumb' + (p === pos ? ' current' : '');
       b.dataset.pos = String(p);
       b.dataset.idx = String(idx);
+      b.dataset.search = normalize(m.path);
       b.setAttribute('aria-label', `${p + 1}. ${baseName(m)}${m.type === 'video' ? ' (filmpje)' : ''}`);
       if (p === pos) b.setAttribute('aria-current', 'true');
       if (m.type === 'image') {
@@ -1154,6 +1733,7 @@
     });
     gridItems.innerHTML = '';
     gridItems.appendChild(frag);
+    filterGrid();
     grid.hidden = false;
     grid.classList.add('open');
     bar.inert = true;
@@ -1188,10 +1768,12 @@
     gridItems.innerHTML = '';
     if (!resume) return;
     if (jumpPos != null && jumpPos >= 0 && jumpPos < order.length) {
-      playing = gridWasPlaying;
+      // Gekozen foto openen in pauze, zodat je hem rustig kunt bekijken of bewerken
+      playing = false;
       updateButtons();
       pos = jumpPos;
       display(0);
+      toast('Gepauzeerd · T bijschrift · P plek · R draaien · spatie = verder', 2600);
     } else if (gridWasPlaying) {
       resumePlayback();
     }
@@ -1203,6 +1785,39 @@
 
   function toggleGrid() { if (gridOpen()) closeGrid(null); else openGrid(); }
 
+  // Zoeken op naam of map (hoofdletters en accenten maken niet uit)
+  const normalize = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const visibleThumbs = () => [...gridItems.querySelectorAll('.thumb:not([hidden])')];
+  function filterGrid() {
+    const words = normalize($('gridSearch').value).split(/\s+/).filter(Boolean);
+    let any = false;
+    for (const el of gridItems.children) {
+      if (!el.classList.contains('thumb')) continue;
+      el.hidden = !words.every((w) => el.dataset.search.includes(w));
+      any = any || !el.hidden;
+    }
+    // Mapkop alleen tonen als er in die map iets zichtbaar is
+    for (const h of gridItems.querySelectorAll('.grid-folder')) {
+      let n = h.nextElementSibling, show = false;
+      while (n && n.classList.contains('thumb')) { if (!n.hidden) { show = true; break; } n = n.nextElementSibling; }
+      h.hidden = !show;
+    }
+    $('gridEmpty').hidden = any;
+  }
+  $('gridSearch').addEventListener('input', () => { filterGrid(); gridItems.scrollTop = 0; });
+  $('gridSearch').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // Eerst de zoektekst wissen, daarna pas het overzicht sluiten
+      if (e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; filterGrid(); }
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      const first = visibleThumbs()[0];
+      if (first) { e.preventDefault(); if (e.key === 'Enter') first.click(); else first.focus(); }
+    }
+    e.stopPropagation(); // typen in het zoekvak is geen sneltoets
+  });
+
   // Klikken in het overzicht niet doorgeven aan de voorstelling (die zou vorige/volgende doen)
   grid.addEventListener('click', (e) => e.stopPropagation());
   grid.addEventListener('dblclick', (e) => e.stopPropagation());
@@ -1213,7 +1828,7 @@
   $('gridClose').onclick = () => closeGrid(null);
 
   function gridKey(e) {
-    const thumbs = [...gridItems.children];
+    const thumbs = visibleThumbs();
     if (!thumbs.length) return false;
     let i = thumbs.indexOf(document.activeElement);
     const cols = Math.max(1, getComputedStyle(gridItems).gridTemplateColumns.split(' ').filter(Boolean).length);
@@ -1235,10 +1850,11 @@
   // Bedieningsbalk tonen bij muisbeweging, daarna weer verbergen
   let uiTimer;
   function pokeUI() {
+    show.style.setProperty('--bar-h', `${bar.offsetHeight || 64}px`);
     show.classList.add('ui');
     clearTimeout(uiTimer);
     uiTimer = setTimeout(() => {
-      const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible');
+      const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible') || captionEditing();
       if (keepOpen) pokeUI(); else show.classList.remove('ui');
     }, 2500);
   }
@@ -1249,7 +1865,7 @@
   // Enkele klik pas na korte tijd uitvoeren, zodat een dubbelklik alleen volledig scherm wisselt
   let clickTimer = null;
   show.addEventListener('click', (e) => {
-    if (!e.target.isConnected || e.target.closest('#bar, #grid')) return;
+    if (!e.target.isConnected || e.target.closest('#bar, #grid, #captionEdit') || captionEditing()) return;
     pokeUI();
     clearTimeout(clickTimer);
     clickTimer = null;
@@ -1265,7 +1881,7 @@
     }, 250);
   });
   show.addEventListener('dblclick', (e) => {
-    if (e.target.closest('#bar, #grid')) return;
+    if (e.target.closest('#bar, #grid, #captionEdit')) return;
     if (performance.now() - gridClosedAt < 500) return; // tweede klik van een dubbelklik op een miniatuur
     clearTimeout(clickTimer);
     clickTimer = null;
@@ -1276,12 +1892,34 @@
   bar.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
 
   $('startBtn').onclick = start;
+  // Starten in pauze en meteen het overzicht openen, om een foto te zoeken en te bewerken
+  $('browseBtn').onclick = () => {
+    start();
+    if (!show.classList.contains('active')) return;
+    pausePlayback();
+    openGrid();
+  };
   $('prevBtn').onclick = () => display(-1);
   $('nextBtn').onclick = () => display(1);
   $('playBtn').onclick = togglePlay;
   $('muteBtn').onclick = toggleMute;
   $('shuffleBtn').onclick = toggleShuffle;
   $('kbBtn').onclick = toggleKenBurns;
+  $('captionBtn').onclick = () => openCaptionEditor('caption');
+  $('placeBtn').onclick = () => openCaptionEditor('place');
+  $('rotateBtn').onclick = rotatePhoto;
+  $('captionCancel').onclick = () => closeCaptionEditor(false);
+  $('captionEdit').addEventListener('submit', (e) => { e.preventDefault(); closeCaptionEditor(true); });
+  $('captionInput').addEventListener('keydown', (e) => {
+    // Typen in het tekstvak mag geen sneltoetsen van de voorstelling activeren
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); closeCaptionEditor(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+  });
+  $('captionEdit').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+  });
   $('fillBtn').onclick = toggleFill;
   $('gridBtn').onclick = openGrid;
   $('fsBtn').onclick = toggleFullscreen;
@@ -1305,6 +1943,11 @@
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (captionEditing()) {
+      // Tekstvak open maar focus ergens anders: alleen Esc (annuleren) doet iets
+      if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+      return;
+    }
     if (gridOpen()) {
       if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') { e.preventDefault(); closeGrid(null); }
       else if (gridKey(e)) e.preventDefault();
@@ -1325,6 +1968,9 @@
       case 's': case 'S': toggleShuffle(); break;
       case 'a': case 'A': toggleKenBurns(); break;
       case 'v': case 'V': toggleFill(); break;
+      case 't': case 'T': e.preventDefault(); openCaptionEditor('caption'); break;
+      case 'p': case 'P': e.preventDefault(); openCaptionEditor('place'); break;
+      case 'r': case 'R': rotatePhoto(); break;
       case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;
@@ -1335,6 +1981,7 @@
   // Alleen-lezen testhaak
   Object.defineProperty(window, 'diashow', {
     value: Object.freeze({
+      exif: Exif, // voor tests: metadata lezen/schrijven
       get state() {
         return { pos, order: [...order], playing, count: media.length, liveUrls: slideUrls.size, source };
       },

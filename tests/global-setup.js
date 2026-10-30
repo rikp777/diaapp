@@ -14,6 +14,8 @@ function png(file, size, color) {
 }
 
 module.exports = async () => {
+  // De Windows-test (windows.spec.js) maakt zijn eigen foto's en heeft geen ffmpeg nodig
+  if (process.env.DIASHOW_GEEN_MEDIA) return;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-media-'));
 
   // Different aspect ratios; names exercise natural sort (foto2 before foto10).
@@ -36,6 +38,14 @@ module.exports = async () => {
   // Portrait (staand) video, like a phone video, for the fill test.
   ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=240x320:rate=25',
     '-t', '2', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'staand.webm')]);
+
+  // JPG-foto's voor tekst en draaien (metadata): zonder EXIF, en als "camerafoto"
+  const { withCameraExif } = require('./jpeg-tools');
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=640x480', '-frames:v', '1', '-q:v', '4', path.join(dir, 'zonder-exif.jpg')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=160x120', '-frames:v', '1', '-q:v', '8', path.join(dir, 'thumb.jpg')]);
+  const plain = fs.readFileSync(path.join(dir, 'zonder-exif.jpg'));
+  fs.writeFileSync(path.join(dir, 'canon.jpg'), withCameraExif(plain, { le: true }));
+  fs.writeFileSync(path.join(dir, 'nikon.jpg'), withCameraExif(plain, { le: false, thumbnail: fs.readFileSync(path.join(dir, 'thumb.jpg')) }));
 
   // Unsupported files.
   fs.writeFileSync(path.join(dir, 'kapot.heic'), crypto.randomBytes(4096));
