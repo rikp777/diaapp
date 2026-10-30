@@ -3,38 +3,37 @@
 Een eenvoudige diavoorstelling voor foto's en filmpjes, vergelijkbaar met de
 diavoorstelling van Windows Foto's, maar dan kies je zelf hoeveel seconden elke
 foto te zien is en worden filmpjes gewoon afgespeeld. De app is één bestand
-(`index.html`) en werkt zonder installatie; met `Diavoorstelling.bat` start hij
-op Windows vanzelf met alle foto's en filmpjes uit de map.
+(`index.html`) en werkt zonder installatie. Op Windows download je één bestand,
+zet je het in je fotomap en dubbelklik je erop.
 
 **Privacy:** je bestanden blijven op je eigen computer. Er wordt niets
 geüpload; de browser toont ze rechtstreeks vanaf je schijf (via tijdelijke
 *object URLs*).
 
-## Gebruik op een Windows-pc (automatisch)
+## Gebruik op een Windows-pc
 
-1. Download [`index.html`](index.html) en [`Diavoorstelling.bat`](Diavoorstelling.bat)
-   en zet ze allebei in je fotomap.
-2. Dubbelklik op **Diavoorstelling.bat**.
+Voor iedereen, ook zonder computerkennis:
 
-Het startbestand zoekt alle foto's en filmpjes in die map (ook in submappen),
-zet de lijst in `diashow-lijst.js` en opent de voorstelling meteen op
-volledig scherm in Microsoft Edge (of Chrome als Edge ontbreekt). Er hoeft
-niets geïnstalleerd te worden. Heb je foto's toegevoegd? Dubbelklik dan
-gewoon opnieuw. Met `Esc` ga je naar het startscherm; sluit het venster met
-`Alt+F4`.
+1. Ga naar <https://rikp777.github.io/diaapp/> en klik op **Download Diavoorstelling**.
+2. Sleep het bestand `Diavoorstelling.bat` uit *Downloads* naar je fotomap.
+3. Dubbelklik erop. De voorstelling begint meteen op volledig scherm.
 
-> Krijg je bij de eerste keer de melding *"Windows heeft uw pc beschermd"*?
-> Klik op **Meer informatie → Toch uitvoeren**. Of klik vooraf met rechts op
-> het bestand → **Eigenschappen** → vink **Blokkering opheffen** aan.
+De downloadpagina legt ook uit wat je doet bij de waarschuwingen die Windows
+de eerste keer kan geven (*Behouden* bij het downloaden; *Meer informatie →
+Toch uitvoeren* bij het openen).
 
-De instellingen worden in een eigen browserprofiel onthouden
-(`%LOCALAPPDATA%\Diavoorstelling`).
+Hoe het werkt: in `Diavoorstelling.bat` zit de hele app. Bij dubbelklikken zet
+het de app in `%LOCALAPPDATA%\Diavoorstelling`, zoekt alle foto's en filmpjes
+in de map van het bestand (ook in submappen) en opent ze in Microsoft Edge
+(of Chrome) als los venster op volledig scherm. Er wordt niets in je fotomap
+gezet. Foto's toegevoegd? Dubbelklik opnieuw. `Esc` brengt je naar het
+instellingenscherm, `Alt+F4` sluit af. Instellingen worden onthouden.
 
 ## Gebruik zonder startbestand
 
 1. Open `index.html` door erop te dubbelklikken (Chrome, Edge, Firefox of
    Safari), of gebruik de online versie:
-   <https://rikp777.github.io/diaapp/>.
+   <https://rikp777.github.io/diaapp/app/>.
 2. Kies **Bestanden kiezen…** of **Map kiezen…**, of sleep bestanden of hele
    mappen naar het venster.
 3. Stel in hoeveel seconden elke foto te zien is en klik op
@@ -120,10 +119,22 @@ De tests staan in `tests/slideshow.spec.js` en maken hun testfoto's en
 geïnstalleerd zijn. Op GitHub draaien ze automatisch via
 `.github/workflows/test.yml`.
 
+### Het downloadbestand maken
+
+`Diavoorstelling.bat` in de repo is alleen het startgedeelte. Met
+
+```sh
+node scripts/maak-download.js
+```
+
+ontstaat `dist/Diavoorstelling.bat` met `index.html` erin. De Pages-workflow
+doet dit automatisch en zet het bestand op de downloadpagina (`site/index.html`).
+
 ## Publiceren op GitHub Pages
 
 1. Ga in de repository naar **Settings → Pages** en kies bij **Source**:
    **GitHub Actions**.
 2. De workflow `.github/workflows/pages.yml` publiceert de app bij elke push
    naar `main` (of handmatig via *Run workflow*).
-3. De app staat dan op <https://rikp777.github.io/diaapp/>.
+3. De downloadpagina staat dan op <https://rikp777.github.io/diaapp/>, de app
+   zelf op <https://rikp777.github.io/diaapp/app/>.

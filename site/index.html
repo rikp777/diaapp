@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diavoorstelling downloaden</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #18181b; --muted: #52525b;
+    --line: #e4e4e7; --accent: #1d4ed8; --accent-hover: #1e40af; --tip: #fef9c3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #09090b; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa;
+      --line: #27272a; --accent: #3b82f6; --accent-hover: #2563eb; --tip: #3f3a12;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 18px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 8px; }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+  .download {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--accent); color: #fff; font-size: 22px; font-weight: 600;
+    padding: 20px 24px; border-radius: 14px;
+  }
+  .download:hover { background: var(--accent-hover); }
+  .download:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+  .download small { display: block; font-size: 15px; font-weight: 400; opacity: .9; }
+  ol { list-style: none; padding: 0; margin: 32px 0 0; counter-reset: stap; }
+  ol > li {
+    counter-increment: stap; position: relative;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 18px 72px; margin-bottom: 14px;
+  }
+  ol > li::before {
+    content: counter(stap); position: absolute; left: 18px; top: 16px;
+    width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent); color: #fff; font-weight: 700;
+  }
+  li h2 { font-size: 20px; margin: 4px 0 6px; }
+  li p { margin: 0 0 8px; }
+  .tip { background: var(--tip); border-radius: 10px; padding: 10px 14px; font-size: 16px; }
+  kbd {
+    font: 15px ui-monospace, monospace; padding: 1px 7px; border-radius: 5px;
+    border: 1px solid var(--line); border-bottom-width: 2px; background: var(--card);
+  }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 17px; }
+  td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { white-space: nowrap; padding-right: 16px; }
+  section { margin-top: 36px; }
+  h3 { font-size: 22px; margin: 0 0 8px; }
+  .klein { color: var(--muted); font-size: 15px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Diavoorstelling</h1>
+  <p class="lead">Laat al je foto's en filmpjes uit een map zien, op het hele scherm.
+    Je bepaalt zelf hoe lang elke foto te zien is. Voor Windows-computers.</p>
+
+  <a class="download" href="Diavoorstelling.bat" download="Diavoorstelling.bat">
+    Download Diavoorstelling
+    <small>Eén bestand, niets installeren</small>
+  </a>
+
+  <ol>
+    <li>
+      <h2>Downloaden</h2>
+      <p>Klik op de blauwe knop hierboven.</p>
+      <p class="tip">Zegt de browser dat het bestand <em>niet vaak wordt gedownload</em>?
+        Klik dan op de drie puntjes <strong>…</strong> naast de melding en kies
+        <strong>Behouden</strong>.</p>
+    </li>
+    <li>
+      <h2>In je fotomap zetten</h2>
+      <p>Open de map <strong>Downloads</strong>. Sleep <strong>Diavoorstelling</strong> naar
+        de map met je foto's. Foto's in mappen daarbinnen doen ook mee.</p>
+    </li>
+    <li>
+      <h2>Dubbelklikken</h2>
+      <p>Dubbelklik op <strong>Diavoorstelling</strong> in je fotomap. De voorstelling
+        begint meteen.</p>
+      <p class="tip">De eerste keer kan er een blauw venster komen: <em>"Windows heeft uw pc
+        beschermd"</em>. Klik op <strong>Meer informatie</strong> en daarna op
+        <strong>Toch uitvoeren</strong>. Dat hoeft maar één keer.</p>
+    </li>
+  </ol>
+
+  <section>
+    <h3>Tijdens de voorstelling</h3>
+    <table>
+      <tr><td><kbd>Esc</kbd></td><td>Naar het instellingenscherm, bijvoorbeeld om het aantal seconden per foto te veranderen. Je instellingen worden onthouden.</td></tr>
+      <tr><td><kbd>Spatie</kbd></td><td>Pauze / verder</td></tr>
+      <tr><td><kbd>→</kbd> <kbd>←</kbd></td><td>Volgende / vorige foto</td></tr>
+      <tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>Foto's een seconde langer / korter laten zien</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Alle foto's als kleine plaatjes; klik er een aan</td></tr>
+      <tr><td><kbd>Alt</kbd> + <kbd>F4</kbd></td><td>Afsluiten</td></tr>
+    </table>
+    <p>Met de muis: klik rechts op het scherm voor de volgende foto, links voor de vorige,
+      in het midden voor pauze. Beweeg de muis om de knoppen te zien.</p>
+  </section>
+
+  <section>
+    <h3>Goed om te weten</h3>
+    <p>Je foto's blijven op je eigen computer; er wordt niets verstuurd. Foto's of
+      filmpjes toegevoegd? Dubbelklik gewoon opnieuw op Diavoorstelling.</p>
+    <p class="klein">Geen Windows? <a href="app/">Open de diavoorstelling in je browser</a>
+      en kies daar zelf je foto's.</p>
+  </section>
+</main>
+</body>
+</html>

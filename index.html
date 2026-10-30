@@ -389,7 +389,7 @@
   // ---------- Bestanden kiezen ----------
   // { path, type: 'image' | 'video', file? (gekozen bestand) | src? (relatieve URL uit de lijst), bad? }
   let media = [];
-  let source = 'bestanden'; // 'lijst' = diashow-lijst.js naast index.html, 'bestanden' = zelf gekozen
+  let source = 'bestanden'; // 'lijst' = diashow-lijst.js van de Windows-starter, 'bestanden' = zelf gekozen
   let loadSkipped = 0;
   let loadGen = 0;
 
@@ -495,6 +495,9 @@
     img.src = src;
     return img.decode().then(() => true, () => false);
   }
+  // Map met de foto's als file:-adres (Windows-starter); anders relatief t.o.v. index.html
+  const listBase = typeof window.DIASHOW_BASE === 'string' && window.DIASHOW_BASE
+    ? window.DIASHOW_BASE.replace(/\/?$/, '/') : '';
   async function setList(paths) {
     const gen = ++loadGen;
     revokeAllSlideUrls();
@@ -505,7 +508,7 @@
     let unknown = 0;
     for (const p of all) {
       const type = IMAGE_EXT.test(p) ? 'image' : VIDEO_EXT.test(p) ? 'video' : null;
-      if (type) list.push({ path: p, src: encodePath(p), type }); else unknown++;
+      if (type) list.push({ path: p, src: listBase + encodePath(p), type }); else unknown++;
     }
     // Riskante beeldformaten: per extensie één keer proberen (bv. HEIC werkt in Safari wel)
     const extOk = new Map();

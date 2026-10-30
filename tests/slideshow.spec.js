@@ -658,3 +658,53 @@ test.describe('na review', () => {
     expect(await page.evaluate(() => window.__fs)).toBe(0);
   });
 });
+
+test.describe('Windows-download (één bestand)', () => {
+  let app, photos;
+  test.beforeAll(() => {
+    // Zoals de starter het doet: app in de ene map, foto's (met spatie en # in de naam) in een andere
+    app = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-app-'));
+    photos = fs.mkdtempSync(path.join(os.tmpdir(), 'Foto\'s van mam #1 '));
+    const src = process.env.DIASHOW_MEDIA || '';
+    fs.copyFileSync(path.resolve(__dirname, '..', 'index.html'), path.join(app, 'index.html'));
+    fs.copyFileSync(path.join(src, 'foto1.png'), path.join(photos, 'foto1.png'));
+    fs.mkdirSync(path.join(photos, 'Vakantie 2024'));
+    fs.copyFileSync(path.join(src, 'foto2.png'), path.join(photos, 'Vakantie 2024', 'strand.png'));
+    const base = pathToFileURL(photos).href + '/';
+    fs.writeFileSync(path.join(app, 'diashow-lijst.js'),
+      `window.DIASHOW_BASE = ${JSON.stringify(base)};\nwindow.DIASHOW_FILES = ["foto1.png","Vakantie 2024/strand.png"];\n`);
+  });
+  test.afterAll(() => {
+    for (const d of [app, photos]) if (d) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  test('photos from another folder (DIASHOW_BASE) are shown', async ({ page }) => {
+    await page.goto(pathToFileURL(path.join(app, 'index.html')).href);
+    await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+    await ensureNotFullscreen(page);
+    await page.keyboard.press('Home');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect.poll(() => page.evaluate(() => {
+      const img = /** @type {HTMLImageElement|null} */ (document.querySelector('.slide.visible img'));
+      return img ? img.naturalWidth : 0;
+    })).toBeGreaterThan(0);
+    await next(page, 'Vakantie 2024/strand.png');
+    expect((await state(page)).count).toBe(2);
+  });
+
+  test('build script puts the whole app into one .bat', async () => {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.resolve(__dirname, '..', 'scripts', 'maak-download.js')]);
+    const bat = fs.readFileSync(path.resolve(__dirname, '..', 'dist', 'Diavoorstelling.bat'), 'utf8');
+    expect(bat.startsWith('@echo off\r\n')).toBe(true);
+    expect(bat.replace(/\r\n/g, '')).not.toContain('\n'); // overal CRLF
+    // Zelfde splitsing als het PowerShell-deel: script tussen de scheidingstekens, daarna de app
+    const [, rest] = bat.split('#POWERSHELL#');
+    const [script, html] = rest.split('#DIAHTML#');
+    expect(script).toContain('$global:DiaHtml');
+    expect(script).not.toContain('<html');
+    const app = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+    expect(html.replace(/\r\n/g, '\n').trimStart()).toBe(app.replace(/\r\n/g, '\n'));
+    expect(/[^\x00-\x7f]/.test(bat.slice(0, bat.indexOf('#DIAHTML#')))).toBe(false);
+  });
+});

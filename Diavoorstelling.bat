@@ -1,10 +1,10 @@
 @echo off
-rem Diavoorstelling: zet dit bestand samen met index.html in je fotomap en dubbelklik erop.
-rem Het zoekt alle foto's en filmpjes in deze map (en submappen), schrijft de lijst naar
-rem diashow-lijst.js en opent de voorstelling op volledig scherm in Microsoft Edge.
+rem Diavoorstelling - zet dit bestand in je fotomap en dubbelklik erop.
+rem Het zoekt alle foto's en filmpjes in deze map (en submappen) en toont ze
+rem op volledig scherm in Microsoft Edge. Er wordt niets in je fotomap gezet.
 setlocal
 set "DIA_BAT=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$m = '#' + 'POWERSHELL' + '#'; $s = (Get-Content -LiteralPath $env:DIA_BAT -Raw -Encoding UTF8) -split $m, 2; Invoke-Expression $s[1]"
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$t = Get-Content -LiteralPath $env:DIA_BAT -Raw -Encoding UTF8; $p = ($t -split ('#' + 'POWERSHELL' + '#'), 2)[1] -split ('#' + 'DIAHTML' + '#'), 2; $global:DiaHtml = $p[1]; Invoke-Expression $p[0]"
 exit /b
 
 #POWERSHELL#
@@ -13,17 +13,28 @@ function Melding($tekst) {
   try {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show($tekst, 'Diavoorstelling') | Out-Null
-  } catch {
-    # Geen meldingsvenster mogelijk: dan in een consolevenster
-    Write-Host $tekst; Read-Host 'Druk op Enter om te sluiten' | Out-Null
-  }
+  } catch {}
 }
+# Pad -> file:-adres; elk deel apart coderen zodat spaties, # en % goed gaan
+function FileUrl($pad) {
+  $delen = ($pad -replace '\\', '/') -split '/'
+  if ($pad.StartsWith('\\')) { return 'file:' + (($delen | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/') }
+  return 'file:///' + (($delen | ForEach-Object { if ($_ -match '^[A-Za-z]:$') { $_ } else { [Uri]::EscapeDataString($_) } }) -join '/')
+}
+$utf8 = New-Object Text.UTF8Encoding $false
 
 try {
   $map = Split-Path -LiteralPath $env:DIA_BAT
-  $index = Join-Path $map 'index.html'
-  if (-not (Test-Path -LiteralPath $index)) {
-    Melding "index.html staat niet in deze map:`n$map`n`nZet Diavoorstelling.bat en index.html samen in je fotomap."
+  # De app staat in een eigen map, zodat de fotomap schoon blijft
+  $app = Join-Path $env:LOCALAPPDATA 'Diavoorstelling'
+  New-Item -ItemType Directory -Force -Path $app | Out-Null
+  $index = Join-Path $app 'index.html'
+  if ($global:DiaHtml) {
+    [IO.File]::WriteAllText($index, $global:DiaHtml.TrimStart("`r", "`n"), $utf8)
+  } elseif (Test-Path -LiteralPath (Join-Path $map 'index.html')) {
+    Copy-Item -LiteralPath (Join-Path $map 'index.html') -Destination $index -Force
+  } else {
+    Melding "Dit startbestand is onvolledig. Download Diavoorstelling.bat opnieuw."
     exit
   }
 
@@ -41,23 +52,18 @@ try {
   $paden = @(foreach ($b in $bestanden) { $b.FullName.Substring($basis).TrimStart('\') -replace '\\', '/' })
 
   if ($paden.Count -eq 0) {
-    Melding "Geen foto's of filmpjes gevonden in:`n$map"
+    Melding "Er staan geen foto's of filmpjes in deze map:`n$map`n`nZet Diavoorstelling.bat in de map met je foto's en dubbelklik er opnieuw op."
+    exit
   }
 
-  # Lijst wegschrijven als JavaScript (UTF-8 zonder BOM), zodat index.html hem kan lezen
-  $json = if ($paden.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $paden -Compress }
-  try {
-    [IO.File]::WriteAllText((Join-Path $map 'diashow-lijst.js'), "window.DIASHOW_FILES = $json;`n", (New-Object Text.UTF8Encoding $false))
-  } catch {
-    Melding "Kan de lijst niet opslaan in deze map (alleen-lezen?):`n$($_.Exception.Message)`n`nDe diavoorstelling opent zonder lijst; kies dan zelf je bestanden."
-  }
-
-  # file:-adres opbouwen; elk deel apart coderen zodat # en % in mapnamen goed gaan
-  $delen = ($index -replace '\\', '/') -split '/'
-  $url = 'file:///' + (($delen | ForEach-Object { if ($_ -match '^[A-Za-z]:$') { $_ } else { [Uri]::EscapeDataString($_) } }) -join '/')
-  if ($index.StartsWith('\\')) { $url = 'file:' + (($delen | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/') }
+  # Lijst voor de app: map als file:-adres plus de paden daarbinnen
+  $json = ConvertTo-Json -InputObject $paden -Compress
+  $basisUrl = ConvertTo-Json -InputObject ((FileUrl $map.TrimEnd('\')) + '/')
+  [IO.File]::WriteAllText((Join-Path $app 'diashow-lijst.js'),
+    "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n", $utf8)
 
   # Openen in Edge als los venster op volledig scherm; Chrome als Edge ontbreekt
+  $url = FileUrl $index
   $browsers = @(
     "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
     "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
@@ -69,9 +75,9 @@ try {
   $browser = $browsers | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 
   if ($browser) {
-    # Eigen profielmap: dan gelden de opties hieronder ook als de browser al openstaat,
+    # Eigen profiel: dan gelden de opties hieronder ook als de browser al openstaat,
     # en worden de instellingen van de diavoorstelling daar onthouden.
-    $profiel = Join-Path $env:LOCALAPPDATA 'Diavoorstelling'
+    $profiel = Join-Path $app 'profiel'
     $argumenten = @(
       "--app=`"$url`"",
       '--start-fullscreen',
