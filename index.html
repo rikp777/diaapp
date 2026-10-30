@@ -162,9 +162,15 @@
     font-size: clamp(20px, 3vw, 42px); line-height: 1.3; font-weight: 600;
     white-space: pre-line; overflow-wrap: anywhere;
   }
-  #place { font-size: clamp(15px, 1.8vw, 24px); line-height: 1.3; margin-bottom: 4px; overflow-wrap: anywhere; }
+  #where {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 20px;
+    font-size: clamp(15px, 1.8vw, 24px); line-height: 1.3; margin-bottom: 4px;
+  }
+  #place, #date { overflow-wrap: anywhere; }
   #place::before { content: "\1F4CD\00A0"; }
-  #caption:empty, #place:empty { display: none; }
+  #date::before { content: "\1F4C5\00A0"; }
+  #caption:empty, #place:empty, #date:empty { display: none; }
+  #where:not(:has(:not(:empty))) { display: none; }
 
   #captionEdit {
     position: absolute; left: 50%; bottom: calc(var(--bar-h, 64px) + 40px); transform: translateX(-50%);
@@ -316,6 +322,12 @@
         <input type="checkbox" id="showPlace">
       </div>
       <div class="setting">
+        <label for="showDate">Datum tonen
+          <small>Wanneer de foto gemaakt is (uit de foto zelf; anders de datum van het bestand)</small>
+        </label>
+        <input type="checkbox" id="showDate">
+      </div>
+      <div class="setting">
         <label for="showName">Bestandsnaam tonen
           <small>De naam van de foto linksboven in beeld</small>
         </label>
@@ -343,7 +355,7 @@
   <div class="slide" id="slideB"></div>
 
   <div id="overlay" class="empty" aria-live="polite">
-    <div id="place"></div>
+    <div id="where"><span id="place"></span><span id="date"></span></div>
     <div id="caption"></div>
   </div>
   <div id="info"><span id="name"></span></div>
@@ -448,7 +460,7 @@
   const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showName: false, volume: 1 };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showDate: true, showName: false, volume: 1 };
   const settings = { ...defaults };
   const clampSeconds = (v) => {
     const n = v === '' || v === null ? NaN : Math.round(Number(v));
@@ -468,7 +480,7 @@
   if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showName'];
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showDate', 'showName'];
   function syncStartControls() {
     $('seconds').value = settings.seconds;
     $('videoMode').value = settings.videoMode;
@@ -604,13 +616,15 @@
     metaCache.clear();
     revokeAllSlideUrls();
     source = 'lijst';
-    const all = paths.filter((p) => typeof p === 'string' && p.trim())
-      .map((p) => p.replace(/\\/g, '/').replace(/^\.?\//, ''));
+    // Bestandsdatums (ms) uit de Windows-starter, in dezelfde volgorde als de paden
+    const times = Array.isArray(window.DIASHOW_TIMES) ? window.DIASHOW_TIMES : [];
+    const all = paths.map((p, i) => [p, times[i]]).filter(([p]) => typeof p === 'string' && p.trim())
+      .map(([p, t]) => [p.replace(/\\/g, '/').replace(/^\.?\//, ''), Number.isFinite(t) ? t : 0]);
     const list = [];
     let unknown = 0;
-    for (const p of all) {
+    for (const [p, mtime] of all) {
       const type = IMAGE_EXT.test(p) ? 'image' : VIDEO_EXT.test(p) ? 'video' : null;
-      if (type) list.push({ path: p, src: listBase + encodePath(p), type }); else unknown++;
+      if (type) list.push({ path: p, src: listBase + encodePath(p), type, mtime }); else unknown++;
     }
     // Riskante beeldformaten: per extensie één keer proberen (bv. HEIC werkt in Safari wel)
     const extOk = new Map();
@@ -777,6 +791,7 @@
     $('captionEdit').hidden = true;
     $('caption').textContent = '';
     $('place').textContent = '';
+    $('date').textContent = '';
     updateOverlay();
     clearTimer();
     token++;
@@ -1142,6 +1157,7 @@
   // en wijst de kop daarheen. Zo blijven alle bestaande verwijzingen geldig.
   const Exif = (() => {
     const ORIENT = 0x0112, DESC = 0x010E, XPTITLE = 0x9C9B, XPSUBJECT = 0x9C9F, GPS = 0x8825;
+    const DATETIME = 0x0132, EXIFIFD = 0x8769, DATE_ORIGINAL = 0x9003;
     const SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
     // Teksten die camera's zelf invullen; die tonen we niet als bijschrift
     const JUNK = /^(OLYMPUS DIGITAL CAMERA|SONY DSC|DIGITAL CAMERA|KONICA MINOLTA DIGITAL CAMERA|default|Default|image|Image|DCIM|\s*)$/;
@@ -1217,8 +1233,35 @@
       return { lat, lon };
     }
 
+    // 'JJJJ:MM:DD UU:MM:SS' -> 'JJJJ-MM-DD', of '' als het geen geldige datum is
+    function exifDate(t, e) {
+      if (!e || e.type !== 2) return '';
+      const v = new TextDecoder('latin1').decode(valueOf(t, e));
+      const m = /^(\d{4}):(\d{2}):(\d{2})/.exec(v);
+      if (!m || m[1] === '0000' || +m[2] < 1 || +m[2] > 12 || +m[3] < 1 || +m[3] > 31) return '';
+      return `${m[1]}-${m[2]}-${m[3]}`;
+    }
+    // Opnamedatum: eerst DateTimeOriginal (in de Exif-lijst), anders DateTime
+    function readDate(t) {
+      const exifPtr = t.entries.find((e) => e.tag === EXIFIFD && e.type === 4);
+      if (exifPtr) {
+        try {
+          const at = t.dv.getUint32(exifPtr.at + 8, t.le);
+          const n = t.dv.getUint16(at, t.le);
+          for (let i = 0; i < n; i++) {
+            const o = at + 2 + i * 12;
+            if (t.dv.getUint16(o, t.le) === DATE_ORIGINAL) {
+              const d = exifDate(t, { type: t.dv.getUint16(o + 2, t.le), count: t.dv.getUint32(o + 4, t.le), at: o });
+              if (d) return d;
+            }
+          }
+        } catch {}
+      }
+      try { return exifDate(t, t.entries.find((e) => e.tag === DATETIME)); } catch { return ''; }
+    }
+
     function read(b) {
-      const out = { caption: '', place: '', gps: null, orientation: 1, hasExif: false };
+      const out = { caption: '', place: '', gps: null, date: '', orientation: 1, hasExif: false };
       const info = segments(b);
       if (info.seg < 0) return out;
       const t = parse(b, info);
@@ -1235,6 +1278,7 @@
       }
       const clean = (v) => v.replace(/\0+$/g, '').replace(/\0/g, '').trim();
       xp = clean(xp); desc = clean(desc); out.place = clean(out.place);
+      out.date = readDate(t);
       out.caption = xp || (JUNK.test(desc) ? '' : desc);
       return out;
     }
@@ -1408,7 +1452,19 @@
 
   // De foto die echt in beeld is (tijdens het laden van de volgende is pos al verder)
   const currentMedia = () => (shownIdx >= 0 ? media[shownIdx] || null : null);
-  const updateOverlay = () => $('overlay').classList.toggle('empty', !$('caption').textContent && !$('place').textContent);
+  const updateOverlay = () => $('overlay').classList.toggle('empty',
+    !$('caption').textContent && !$('place').textContent && !$('date').textContent);
+
+  // Datum: opnamedatum uit de foto, anders de datum van het bestand
+  const DATE_FMT = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+  function dateText(m, meta) {
+    if (meta && meta.date) {
+      const [y, mo, d] = meta.date.split('-').map(Number);
+      return DATE_FMT.format(new Date(y, mo - 1, d));
+    }
+    const t = m.mtime || (m.file && m.file.lastModified) || 0;
+    return t > 0 ? DATE_FMT.format(new Date(t)) : '';
+  }
 
   // ---------- Plaatsnaam uit GPS (OpenStreetMap), onthouden per plek ----------
   const PLACES_KEY = 'diashow-plaatsnamen';
@@ -1453,13 +1509,14 @@
 
   async function showCaption() {
     const m = currentMedia();
-    const c = $('caption'), pl = $('place');
-    c.textContent = ''; pl.textContent = '';
+    const c = $('caption'), pl = $('place'), dt = $('date');
+    c.textContent = ''; pl.textContent = ''; dt.textContent = '';
     updateOverlay();
-    if (!settings.captions && !settings.showPlace) return;
+    if (!m || (!settings.captions && !settings.showPlace && !settings.showDate)) return;
     const meta = await metaOf(m);
     if (m !== currentMedia()) return;
     c.textContent = settings.captions && meta ? meta.caption : '';
+    dt.textContent = settings.showDate ? dateText(m, meta) : '';
     updateOverlay();
     if (!settings.showPlace) return;
     const place = await placeOf(meta);

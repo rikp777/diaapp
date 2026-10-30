@@ -89,9 +89,15 @@ Met `P` (of de speld in de balk) pas je de plek zelf aan; die wordt in de foto
 opgeslagen (Windows: *Onderwerp*). Leegmaken zet de plaatsnaam uit de
 GPS-gegevens terug.
 
+### Datum
+
+Naast de plek staat wanneer de foto gemaakt is, bijvoorbeeld *📅 1 juli 2024*:
+de opnamedatum uit de foto zelf (EXIF), of anders de datum van het bestand
+(bij filmpjes en foto's zonder opnamedatum).
+
 Op het instellingenscherm zet je los van elkaar aan of uit:
-**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht) en
-**Bestandsnaam tonen** (linksboven, standaard uit).
+**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht),
+**Datum tonen** en **Bestandsnaam tonen** (linksboven, standaard uit).
 
 Instellingen worden onthouden in de browser (`localStorage`).
 

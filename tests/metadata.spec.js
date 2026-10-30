@@ -44,6 +44,8 @@ async function setup({ failWrites = false, helper = true, writeDelay = 0 } = {})
   fs.writeFileSync(path.join(app, 'diashow-lijst.js'),
     `window.DIASHOW_BASE = ${JSON.stringify(pathToFileURL(photos).href + '/')};\n` +
     `window.DIASHOW_FILES = ${JSON.stringify(files)};\n` +
+    // Bestandsdatums zoals Diavoorstelling.bat ze doorgeeft (1 mei 2020)
+    `window.DIASHOW_TIMES = ${JSON.stringify(files.map(() => Date.UTC(2020, 4, 1, 12)))};\n` +
     (hulp ? `window.DIASHOW_SERVER = ${JSON.stringify(hulp.url)};\nwindow.DIASHOW_TOKEN = ${JSON.stringify(TOKEN)};\n` : ''));
   return {
     photos, hulp,
@@ -652,5 +654,63 @@ test.describe('foto zoeken en bewerken', () => {
       await expect(page.locator('#name')).toHaveText('nikon.jpg');
       expect(await page.evaluate(() => /** @type {any} */ (window).diashow.state.playing)).toBe(false);
     } finally { await env.cleanup(); }
+  });
+});
+
+
+test.describe('datum', () => {
+  test('shows the date the photo was taken (EXIF), else the file date; can be switched off', async ({ page }) => {
+    const env = await setup();
+    try {
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#date')).toHaveText('1 juli 2024'); // DateTimeOriginal uit de foto
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('foto1.png');
+      await expect(page.locator('#date')).toHaveText('1 mei 2020'); // PNG: datum van het bestand
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('nikon.jpg');
+      await expect(page.locator('#date')).toHaveText('1 mei 2020'); // JPG zonder datum in EXIF
+
+      // Uitzetten op het instellingenscherm
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#showDate')).toBeChecked();
+      await page.uncheck('#showDate');
+      await page.click('#startBtn');
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Home');
+      await expect(page.locator('#name')).toHaveText('canon.jpg');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      await expect(page.locator('#date')).toBeHidden();
+      expect(await page.evaluate(() => JSON.parse(localStorage.getItem('diashow-settings') || '{}').showDate)).toBe(false);
+    } finally { await env.cleanup(); }
+  });
+
+  test('files picked by hand: EXIF date, otherwise the file\'s modification date', async ({ page }) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-datum-'));
+    try {
+      fs.copyFileSync(path.join(MEDIA(), 'canon.jpg'), path.join(dir, 'a.jpg'));
+      fs.copyFileSync(path.join(MEDIA(), 'foto1.png'), path.join(dir, 'b.png'));
+      const d = new Date(2019, 11, 24, 12); // 24 december 2019
+      fs.utimesSync(path.join(dir, 'b.png'), d, d);
+      await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+      await page.setInputFiles('#fileInput', [path.join(dir, 'a.jpg'), path.join(dir, 'b.png')]);
+      await page.click('#startBtn');
+      await expect(page.locator('#name')).toHaveText('a.jpg');
+      await expect(page.locator('#date')).toHaveText('1 juli 2024');
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('b.png');
+      await expect(page.locator('#date')).toHaveText('24 december 2019');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('EXIF date reading: DateTimeOriginal wins, invalid dates are ignored', async ({ page }) => {
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+    const r = await page.evaluate((input) => /** @type {any} */ (window).diashow.exif.read(new Uint8Array(input)).date,
+      [...fs.readFileSync(path.join(MEDIA(), 'canon.jpg'))]);
+    expect(r).toBe('2024-07-01'); // DateTimeOriginal (11:59:58), niet DateTime
+    const none = await page.evaluate((input) => /** @type {any} */ (window).diashow.exif.read(new Uint8Array(input)).date,
+      [...fs.readFileSync(path.join(MEDIA(), 'nikon.jpg'))]);
+    expect(none).toBe('');
   });
 });

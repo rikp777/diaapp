@@ -219,6 +219,7 @@ try {
                'mp4','m4v','webm','mov','mkv','ogv','avi','3gp')
   $overslaan = @($backupNaam, '$RECYCLE.BIN', 'System Volume Information')
   $paden = New-Object System.Collections.Generic.List[string]
+  $tijden = New-Object System.Collections.Generic.List[long]
   $tedoen = New-Object System.Collections.Generic.Stack[object]
   $tedoen.Push(@($map, ''))
   while ($tedoen.Count -gt 0) {
@@ -231,10 +232,13 @@ try {
         if ($overslaan -notcontains $e.Name) { $tedoen.Push(@($e.FullName, $rel)) }
       } elseif ($soorten -contains $e.Extension.TrimStart('.').ToLower()) {
         $paden.Add($rel)
+        # Datum van het bestand (ms sinds 1970), voor als de foto zelf geen datum heeft
+        $tijden.Add(([DateTimeOffset]$e.LastWriteTimeUtc).ToUnixTimeMilliseconds())
       }
     }
   }
   $paden = @($paden)
+  $tijden = @($tijden)
 
   if ($paden.Count -eq 0) {
     Melding "Er staan geen foto's of filmpjes in deze map:`n$map`n`nZet Diavoorstelling.bat in de map met je foto's en dubbelklik er opnieuw op."
@@ -254,7 +258,8 @@ try {
   # Lijst voor de app: map als file:-adres plus de paden daarbinnen
   $json = ConvertTo-Json -InputObject $paden -Compress
   $basisUrl = ConvertTo-Json -InputObject ((FileUrl $map.TrimEnd('\')) + '/')
-  $lijst = "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n"
+  $lijst = "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n" +
+           "window.DIASHOW_TIMES = $(ConvertTo-Json -InputObject $tijden -Compress);`n"
   if ($listener) { $lijst += "window.DIASHOW_SERVER = '$hulpUrl';`nwindow.DIASHOW_TOKEN = '$token';`n" }
   [IO.File]::WriteAllText((Join-Path $app 'diashow-lijst.js'), $lijst, $utf8)
 

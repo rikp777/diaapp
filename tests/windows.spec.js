@@ -91,6 +91,10 @@ test('the launcher scans the folder and writes the list with the helper', async 
   expect(lijst).not.toContain('Diavoorstelling.bat');
   expect(server()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   expect(token().length).toBeGreaterThanOrEqual(32);
+  // Bestandsdatums in dezelfde volgorde als de bestanden
+  const times = JSON.parse(/DIASHOW_TIMES = (\[[^\]]*\])/.exec(lijst)[1]);
+  expect(times.length).toBe(2);
+  for (const t of times) expect(Math.abs(t - OUDE_DATUM.getTime())).toBeLessThan(2000);
 });
 
 test('the helper refuses wrong tokens, paths outside the folder and non-JPG files', async () => {
@@ -126,6 +130,7 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   await openAt(page, 'tuin.jpg');
   await expect(page.locator('#caption')).toHaveText('Zo nog even de tuin grasmaaien – één keer');
   await expect(page.locator('#place')).toHaveText('Utrecht');
+  await expect(page.locator('#date')).toHaveText('1 juli 2024'); // opnamedatum uit de foto
 
   // Plek zelf aanpassen
   await page.keyboard.press('p');
@@ -139,6 +144,7 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
 test('Edge rotates a photo in a subfolder via the real helper', async ({ page }) => {
   const original = file(path.join('sub map', 'strand.jpg'));
   await openAt(page, 'sub map/strand.jpg');
+  await expect(page.locator('#date')).toHaveText('1 mei 2020'); // geen EXIF: datum van het bestand
   await page.keyboard.press('r');
   await expect(page.locator('#toast')).toHaveText('Foto gedraaid', { timeout: 15_000 });
   expect(readMeta(file(path.join('sub map', 'strand.jpg'))).orientation).toBe(6);
