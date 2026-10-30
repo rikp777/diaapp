@@ -2,14 +2,35 @@
 
 Een eenvoudige diavoorstelling voor foto's en filmpjes, vergelijkbaar met de
 diavoorstelling van Windows Foto's, maar dan kies je zelf hoeveel seconden elke
-foto te zien is en worden filmpjes gewoon afgespeeld. Alles zit in één bestand
-(`index.html`) en werkt zonder installatie.
+foto te zien is en worden filmpjes gewoon afgespeeld. De app is één bestand
+(`index.html`) en werkt zonder installatie; met `Diavoorstelling.bat` start hij
+op Windows vanzelf met alle foto's en filmpjes uit de map.
 
 **Privacy:** je bestanden blijven op je eigen computer. Er wordt niets
 geüpload; de browser toont ze rechtstreeks vanaf je schijf (via tijdelijke
 *object URLs*).
 
-## Gebruik
+## Gebruik op een Windows-pc (automatisch)
+
+1. Download [`index.html`](index.html) en [`Diavoorstelling.bat`](Diavoorstelling.bat)
+   en zet ze allebei in je fotomap.
+2. Dubbelklik op **Diavoorstelling.bat**.
+
+Het startbestand zoekt alle foto's en filmpjes in die map (ook in submappen),
+zet de lijst in `diashow-lijst.js` en opent de voorstelling meteen op
+volledig scherm in Microsoft Edge (of Chrome als Edge ontbreekt). Er hoeft
+niets geïnstalleerd te worden. Heb je foto's toegevoegd? Dubbelklik dan
+gewoon opnieuw. Met `Esc` ga je naar het startscherm; sluit het venster met
+`Alt+F4`.
+
+> Krijg je bij de eerste keer de melding *"Windows heeft uw pc beschermd"*?
+> Klik op **Meer informatie → Toch uitvoeren**. Of klik vooraf met rechts op
+> het bestand → **Eigenschappen** → vink **Blokkering opheffen** aan.
+
+De instellingen worden in een eigen browserprofiel onthouden
+(`%LOCALAPPDATA%\Diavoorstelling`).
+
+## Gebruik zonder startbestand
 
 1. Open `index.html` door erop te dubbelklikken (Chrome, Edge, Firefox of
    Safari), of gebruik de online versie:
