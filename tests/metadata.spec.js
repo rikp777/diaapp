@@ -772,3 +772,90 @@ test.describe('dubbele foto\'s en Live Photos', () => {
     } finally { await env.cleanup(); }
   });
 });
+
+test.describe('datum aanpassen', () => {
+  test('D changes the date taken in the photo (time kept); works without an Exif list; PNG explains', async ({ page }) => {
+    const env = await setup();
+    try {
+      const canon = env.file('canon.jpg');
+      await openShow(page, env, 'canon.jpg');
+      await page.keyboard.press('d');
+      await expect(page.locator('#editTitle')).toHaveText('Datum waarop deze foto gemaakt is');
+      await expect(page.locator('#dateInput')).toBeVisible();
+      await expect(page.locator('#captionInput')).toBeHidden();
+      await expect(page.locator('#dateInput')).toHaveValue('2024-07-01');
+      await page.fill('#dateInput', '1998-12-24');
+      await page.locator('#dateInput').press('Enter');
+      await expect(page.locator('#toast')).toHaveText('Datum opgeslagen in de foto');
+      await expect(page.locator('#date')).toHaveText('24 december 1998');
+      const meta = readMeta(env.file('canon.jpg'));
+      expect(meta.dateOriginal).toBe('1998:12:24 11:59:58'); // tijd van de opname blijft
+      expect(meta.make).toBe('Canon');
+      expect(meta.gpsRef).toBe('N');
+      expect(imageData(env.file('canon.jpg')).equals(imageData(canon))).toBe(true);
+      expect(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-originelen', 'canon.jpg')).equals(canon)).toBe(true);
+
+      // PNG: kan niet
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('foto1.png');
+      await page.keyboard.press('d');
+      await expect(page.locator('#toast')).toContainText("alleen bij JPG-foto's");
+      await expect(page.locator('#captionEdit')).toBeHidden();
+
+      // Nikon: geen Exif-lijst, Motorola-volgorde, met voorbeeldafbeelding; begint met de bestandsdatum
+      const nikon = env.file('nikon.jpg');
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('nikon.jpg');
+      await page.mouse.move(640, 300);
+      await page.click('#dateBtn');
+      await expect(page.locator('#dateInput')).toHaveValue('2020-05-01');
+      await page.fill('#dateInput', '2001-02-03');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#date')).toHaveText('3 februari 2001');
+      const m2 = readMeta(env.file('nikon.jpg'));
+      expect(m2.dateOriginal).toBe('2001:02:03 12:00:00');
+      expect(m2.make).toBe('NIKON CORPORATION');
+      expect(m2.thumbnail && m2.thumbnail.equals(readMeta(nikon).thumbnail)).toBe(true);
+      expect(imageData(env.file('nikon.jpg')).equals(imageData(nikon))).toBe(true);
+
+      // Esc annuleert zonder iets te veranderen
+      const before = env.file('nikon.jpg');
+      await page.keyboard.press('d');
+      await page.fill('#dateInput', '1970-01-01');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#captionEdit')).toBeHidden();
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      expect(env.file('nikon.jpg').equals(before)).toBe(true);
+
+      // Na opnieuw openen komt de datum uit de foto
+      await page.reload();
+      await openShow(page, env, 'nikon.jpg');
+      await expect(page.locator('#date')).toHaveText('3 februari 2001');
+    } finally { await env.cleanup(); }
+  });
+
+  test('EXIF: date edits are in place after the first; combined with caption and place; no growth', async ({ page }) => {
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+    for (const f of ['canon.jpg', 'nikon.jpg', 'zonder-exif.jpg']) {
+      const start = fs.readFileSync(path.join(MEDIA(), f));
+      const r = await page.evaluate((input) => {
+        const E = /** @type {any} */ (window).diashow.exif;
+        let b = E.write(new Uint8Array(input), { date: '2010-05-06' });
+        const afterFirst = b.length;
+        const sizes = [];
+        for (let i = 0; i < 20; i++) {
+          b = E.write(b, i % 2 ? { date: `20${10 + i}-01-0${1 + (i % 9)}` } : { caption: `Tekst ${i}`, date: '2011-11-11' });
+          sizes.push(b.length);
+        }
+        b = E.write(b, { date: '2022-02-22', place: 'Ommen' });
+        return { out: [...b], afterFirst, sizes, read: E.read(b) };
+      }, [...start]);
+      const last = Buffer.from(r.out);
+      expect(r.read).toMatchObject({ date: '2022-02-22', place: 'Ommen', caption: 'Tekst 18' });
+      expect(Math.max(...r.sizes.slice(4)) - Math.min(...r.sizes.slice(4))).toBeLessThan(64);
+      expect(imageData(last).equals(imageData(start))).toBe(true);
+      expect(readMeta(last).dateOriginal.startsWith('2022:02:22 ')).toBe(true);
+      expect(readMeta(last).make).toBe(readMeta(start).make);
+    }
+  });
+});
