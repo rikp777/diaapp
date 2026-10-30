@@ -174,9 +174,14 @@ function Verwerk($client, $map, $token) {
 # Luistert tot de diavoorstelling een tijd niets meer vraagt (venster dicht)
 function Start-Hulp($listener, $map, $token, [int]$stilSeconden = 150) {
   $laatste = Get-Date
+  $vorige = Get-Date
   while ($true) {
+    # Na slaapstand (grote sprong in de tijd) opnieuw beginnen met tellen
+    $nu = Get-Date
+    if (($nu - $vorige).TotalSeconds -gt 10) { $laatste = $nu }
+    $vorige = $nu
     if (-not $listener.Pending()) {
-      if (((Get-Date) - $laatste).TotalSeconds -gt $stilSeconden) { break }
+      if (($nu - $laatste).TotalSeconds -gt $stilSeconden) { break }
       Start-Sleep -Milliseconds 100
       continue
     }
@@ -207,19 +212,29 @@ try {
     exit
   }
 
-  # Foto's en filmpjes zoeken (ook in submappen), zonder de map met reservekopieen
+  # Foto's en filmpjes zoeken (ook in submappen), zonder de map met reservekopieen.
+  # Relatieve paden worden opgebouwd uit de echte namen per map; zo maakt het niet uit of
+  # Windows de fotomap met een korte (8.3) of lange naam doorgeeft.
   $soorten = @('jpg','jpeg','jfif','png','apng','gif','webp','bmp','avif','svg','ico','heic','heif','tif','tiff',
                'mp4','m4v','webm','mov','mkv','ogv','avi','3gp')
-  $bestanden = @(Get-ChildItem -LiteralPath $map -Recurse -File -ErrorAction SilentlyContinue |
-    Where-Object {
-      $_ -and
-      $soorten -contains $_.Extension.TrimStart('.').ToLower() -and
-      -not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and
-      $_.FullName -notmatch '\\\$RECYCLE\.BIN\\' -and
-      $_.FullName -notmatch ('\\' + $backupNaam + '\\')
-    })
-  $basis = $map.TrimEnd('\').Length
-  $paden = @(foreach ($b in $bestanden) { $b.FullName.Substring($basis).TrimStart('\') -replace '\\', '/' })
+  $overslaan = @($backupNaam, '$RECYCLE.BIN', 'System Volume Information')
+  $paden = New-Object System.Collections.Generic.List[string]
+  $tedoen = New-Object System.Collections.Generic.Stack[object]
+  $tedoen.Push(@($map, ''))
+  while ($tedoen.Count -gt 0) {
+    $item = $tedoen.Pop()
+    $dir = $item[0]; $relDir = $item[1]
+    foreach ($e in @(Get-ChildItem -LiteralPath $dir -ErrorAction SilentlyContinue)) {
+      if ($e.Attributes -band [IO.FileAttributes]::Hidden) { continue }
+      $rel = if ($relDir) { "$relDir/$($e.Name)" } else { $e.Name }
+      if ($e.PSIsContainer) {
+        if ($overslaan -notcontains $e.Name) { $tedoen.Push(@($e.FullName, $rel)) }
+      } elseif ($soorten -contains $e.Extension.TrimStart('.').ToLower()) {
+        $paden.Add($rel)
+      }
+    }
+  }
+  $paden = @($paden)
 
   if ($paden.Count -eq 0) {
     Melding "Er staan geen foto's of filmpjes in deze map:`n$map`n`nZet Diavoorstelling.bat in de map met je foto's en dubbelklik er opnieuw op."

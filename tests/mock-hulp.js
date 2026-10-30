@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-function startMockHulp(map, token, { failWrites = false } = {}) {
+function startMockHulp(map, token, { failWrites = false, writeDelay = 0 } = {}) {
   const requests = [];
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -29,7 +29,8 @@ function startMockHulp(map, token, { failWrites = false } = {}) {
     if (req.method === 'POST') {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
+      req.on('end', async () => {
+        if (writeDelay) await new Promise((r) => setTimeout(r, writeDelay));
         if (failWrites) return send(500, 'Schijf is alleen-lezen');
         const body = Buffer.concat(chunks);
         if (body[0] !== 0xff || body[1] !== 0xd8) return send(400, 'Geen JPG');

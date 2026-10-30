@@ -6,9 +6,10 @@ foto te zien is en worden filmpjes gewoon afgespeeld. De app is één bestand
 (`index.html`) en werkt zonder installatie. Op Windows download je één bestand,
 zet je het in je fotomap en dubbelklik je erop.
 
-**Privacy:** je bestanden blijven op je eigen computer. Er wordt niets
-geüpload; de browser toont ze rechtstreeks vanaf je schijf (via tijdelijke
-*object URLs*).
+**Privacy:** je foto's en filmpjes blijven op je eigen computer en worden
+nergens heen gestuurd. Alleen voor de plaatsnaam wordt de GPS-positie van een
+foto (de coördinaten, niet de foto) opgezocht bij OpenStreetMap; dat zet je uit
+met **Plek tonen** op het instellingenscherm.
 
 ## Gebruik op een Windows-pc
 
@@ -25,8 +26,9 @@ Toch uitvoeren* bij het openen).
 Hoe het werkt: in `Diavoorstelling.bat` zit de hele app. Bij dubbelklikken zet
 het de app in `%LOCALAPPDATA%\Diavoorstelling`, zoekt alle foto's en filmpjes
 in de map van het bestand (ook in submappen) en opent ze in Microsoft Edge
-(of Chrome) als los venster op volledig scherm. Er wordt niets in je fotomap
-gezet. Foto's toegevoegd? Dubbelklik opnieuw. `Esc` brengt je naar het
+(of Chrome) als los venster op volledig scherm. In je fotomap komt alleen iets
+bij als je een foto aanpast (bijschrift, plek of draaien): dan wordt eerst het
+origineel bewaard in de verborgen map `Diavoorstelling-originelen`. Foto's toegevoegd? Dubbelklik opnieuw. `Esc` brengt je naar het
 instellingenscherm, `Alt+F4` sluit af. Instellingen worden onthouden.
 
 ## Gebruik zonder startbestand

@@ -34,12 +34,12 @@ const test = base.test.extend({
 });
 
 /** Fotomap + app-map zoals Diavoorstelling.bat die klaarzet, met (nagebootst) hulpprogramma. */
-async function setup({ failWrites = false, helper = true } = {}) {
+async function setup({ failWrites = false, helper = true, writeDelay = 0 } = {}) {
   const photos = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-fotos-'));
   const app = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-app-'));
   for (const f of ['canon.jpg', 'nikon.jpg', 'zonder-exif.jpg', 'foto1.png']) fs.copyFileSync(path.join(MEDIA(), f), path.join(photos, f));
   fs.copyFileSync(path.resolve(__dirname, '..', 'index.html'), path.join(app, 'index.html'));
-  const hulp = helper ? await startMockHulp(photos, TOKEN, { failWrites }) : null;
+  const hulp = helper ? await startMockHulp(photos, TOKEN, { failWrites, writeDelay }) : null;
   const files = ['canon.jpg', 'foto1.png', 'nikon.jpg', 'zonder-exif.jpg'];
   fs.writeFileSync(path.join(app, 'diashow-lijst.js'),
     `window.DIASHOW_BASE = ${JSON.stringify(pathToFileURL(photos).href + '/')};\n` +
@@ -421,5 +421,146 @@ test.describe('plek en bestandsnaam', () => {
     const none = await page.evaluate((input) => /** @type {any} */ (window).diashow.exif.read(new Uint8Array(input)).gps,
       [...fs.readFileSync(path.join(MEDIA(), 'nikon.jpg'))]);
     expect(none).toBe(null);
+  });
+});
+
+
+test.describe('na code review', () => {
+  test('the caption goes to the photo the editor was opened for, even if the show moved on', async ({ page }) => {
+    const env = await setup();
+    try {
+      await page.addInitScript(() => localStorage.setItem('diashow-settings', JSON.stringify({ seconds: 1 })));
+      await openShow(page, env, 'nikon.jpg');
+      await page.keyboard.press('t');
+      await expect(page.locator('#captionInput')).toBeFocused();
+      // Afspelen via de balk terwijl het tekstvak open is: de voorstelling schuift door
+      await page.mouse.move(640, 300);
+      await page.click('#playBtn');
+      await expect(page.locator('#name')).toHaveText('zonder-exif.jpg', { timeout: 5000 });
+      await page.fill('#captionInput', 'Hoort bij Nikon');
+      await page.click('#captionEdit button[type=submit]');
+      await expect.poll(() => readMeta(env.file('nikon.jpg')).xptitle).toBe('Hoort bij Nikon');
+      expect(readMeta(env.file('zonder-exif.jpg')).xptitle).toBe(null);
+      expect(fs.existsSync(path.join(env.photos, 'Diavoorstelling-originelen', 'zonder-exif.jpg'))).toBe(false);
+    } finally { await env.cleanup(); }
+  });
+
+  test('a slow place lookup does not overwrite what you already typed', async ({ page }) => {
+    const env = await setup();
+    try {
+      await page.route('https://nominatim.openstreetmap.org/**', async (route) => {
+        await new Promise((r) => setTimeout(r, 1500));
+        route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+          body: JSON.stringify({ address: { city: 'Utrecht', country_code: 'nl' } }) });
+      });
+      await page.addInitScript(() => localStorage.setItem('diashow-settings', JSON.stringify({ showPlace: false })));
+      await openShow(page, env, 'canon.jpg'); // plek uit: nog niets opgezocht
+      await page.evaluate(() => {}); // (niets)
+      await page.keyboard.press('Escape');
+      await page.check('#showPlace');
+      await page.click('#startBtn');
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Home');
+      await expect(page.locator('#name')).toHaveText('canon.jpg');
+      await page.keyboard.press('p');
+      await page.keyboard.type('Mijn eigen plek');
+      await page.waitForTimeout(2500); // opzoeken is intussen klaar
+      await expect(page.locator('#captionInput')).toHaveValue('Mijn eigen plek');
+      // P daarna Esc en T: een late plaatsnaam komt niet in het bijschrift
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('t');
+      await expect(page.locator('#editTitle')).toHaveText('Bijschrift bij deze foto');
+      await page.waitForTimeout(300);
+      await expect(page.locator('#captionInput')).toHaveValue('');
+    } finally { await env.cleanup(); }
+  });
+
+  test('stopping while a rotation is being saved does not restart the show behind the settings screen', async ({ page }) => {
+    const env = await setup({ writeDelay: 1500 });
+    try {
+      await openShow(page, env, 'canon.jpg');
+      await page.keyboard.press('Space'); // weer afspelen
+      await page.keyboard.press('r');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#start')).toBeVisible();
+      await expect.poll(() => readMeta(env.file('canon.jpg')).orientation, { timeout: 5000 }).toBe(6);
+      await page.waitForTimeout(1500);
+      await expect(page.locator('#show')).not.toHaveClass(/\bactive\b/);
+      expect(await page.evaluate(() => document.querySelectorAll('.slide img, .slide video').length)).toBe(0);
+    } finally { await env.cleanup(); }
+  });
+
+  test('a different file with the same name shows its own metadata (no stale cache)', async ({ page }) => {
+    const a = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-a-'));
+    const b = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-b-'));
+    try {
+      await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+      const withCaption = await page.evaluate((input) => [.../** @type {any} */ (window).diashow.exif.write(new Uint8Array(input), { caption: 'Camera A' })],
+        [...fs.readFileSync(path.join(MEDIA(), 'zonder-exif.jpg'))]);
+      fs.writeFileSync(path.join(a, 'IMG_0001.JPG'), Buffer.from(withCaption));
+      fs.copyFileSync(path.join(MEDIA(), 'canon.jpg'), path.join(b, 'IMG_0001.JPG'));
+      await page.setInputFiles('#fileInput', [path.join(a, 'IMG_0001.JPG')]);
+      await page.click('#startBtn');
+      await expect(page.locator('#caption')).toHaveText('Camera A');
+      await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#start')).toBeVisible();
+      await page.setInputFiles('#fileInput', [path.join(b, 'IMG_0001.JPG')]);
+      await page.click('#startBtn');
+      await expect(page.locator('#place')).toHaveText('Utrecht'); // metadata van het tweede bestand
+      await expect(page.locator('#caption')).toHaveText('');
+    } finally {
+      fs.rmSync(a, { recursive: true, force: true });
+      fs.rmSync(b, { recursive: true, force: true });
+    }
+  });
+
+  test('repeated edits do not make the metadata grow; camera data stays intact', async ({ page }) => {
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+    const start = fs.readFileSync(path.join(MEDIA(), 'canon.jpg'));
+    const sizes = await page.evaluate((input) => {
+      const E = /** @type {any} */ (window).diashow.exif;
+      let b = new Uint8Array(input);
+      const sizes = [];
+      for (let i = 0; i < 60; i++) {
+        b = i % 3 === 0 ? E.write(b, { caption: `Bijschrift nummer ${i}` })
+          : i % 3 === 1 ? E.write(b, { place: `Plek ${i}` })
+          : E.write(b, { orientation: [1, 6, 3, 8][i % 4] });
+        sizes.push(b.length);
+      }
+      window.__laatste = [...b];
+      return sizes;
+    }, [...start]);
+    // Na de eerste paar wijzigingen blijft de grootte vrijwel gelijk
+    expect(Math.max(...sizes.slice(10)) - Math.min(...sizes.slice(10))).toBeLessThan(64);
+    const last = Buffer.from(await page.evaluate(() => /** @type {any} */ (window).__laatste));
+    const meta = readMeta(last);
+    expect(meta.xptitle).toBe('Bijschrift nummer 57');
+    expect(meta.xpsubject).toBe('Plek 58');
+    expect(meta.make).toBe('Canon');
+    expect(meta.dateOriginal).toBe('2024:07:01 11:59:58');
+    expect(meta.gpsRef).toBe('N');
+    expect(imageData(last).equals(imageData(start))).toBe(true);
+  });
+
+  test('saving the same text again does not touch the file', async ({ page }) => {
+    const env = await setup();
+    try {
+      await openShow(page, env, 'canon.jpg');
+      await page.keyboard.press('t');
+      await page.keyboard.type('Eén keer');
+      await page.keyboard.press('Enter');
+      await expect.poll(() => readMeta(env.file('canon.jpg')).xptitle).toBe('Eén keer');
+      const posts = () => env.hulp.requests.filter((r) => r.method === 'POST').length;
+      await expect(page.locator('#toast')).not.toHaveClass(/\bshow\b/); // eerste melding is weg
+      const before = posts();
+      await page.keyboard.press('t');
+      await expect(page.locator('#captionInput')).toHaveValue('Eén keer');
+      await page.keyboard.press('Enter');
+      // De melding verschijnt pas als het opslaan klaar is
+      await expect(page.locator('#toast')).toHaveClass(/\bshow\b/);
+      await expect(page.locator('#toast')).toHaveText('Tekst opgeslagen in de foto');
+      expect(posts()).toBe(before);
+    } finally { await env.cleanup(); }
   });
 });

@@ -241,7 +241,7 @@
 <section id="start">
   <div class="card">
     <h1>Diavoorstelling</h1>
-    <p class="sub">Foto's en filmpjes van je eigen computer. Er wordt niets geüpload.</p>
+    <p class="sub">Foto's en filmpjes van je eigen computer. Ze worden nergens heen gestuurd.</p>
 
     <div id="drop">
       Sleep foto's, filmpjes of een map hierheen
@@ -559,6 +559,7 @@
 
   async function setFiles(files) {
     const gen = ++loadGen;
+    metaCache.clear();
     revokeAllSlideUrls();
     media = [];
     source = 'bestanden';
@@ -584,6 +585,7 @@
     ? window.DIASHOW_BASE.replace(/\/?$/, '/') : '';
   async function setList(paths) {
     const gen = ++loadGen;
+    metaCache.clear();
     revokeAllSlideUrls();
     source = 'lijst';
     const all = paths.filter((p) => typeof p === 'string' && p.trim())
@@ -675,12 +677,15 @@
   let token = 0;
   let preloadImg = null;
 
+  // Bestand uit de lijst; na een wijziging (draaien) met versienummer, zodat de browser hem opnieuw laadt
+  const srcOf = (m) => (m.version ? `${m.src}?v=${m.version}` : m.src);
+
   // Object-URL's voor dia's (los van die van de miniaturen)
   const slideUrls = new Map(); // media-index -> url
   // Weergave-URL: relatieve URL uit de lijst (nooit intrekken) of een eigen object-URL
   function urlOf(idx) {
     const m = media[idx];
-    if (m.src) return m.version ? `${m.src}?v=${m.version}` : m.src;
+    if (m.src) return srcOf(m);
     let u = slideUrls.get(idx);
     if (!u) { u = URL.createObjectURL(m.file); slideUrls.set(idx, u); }
     return u;
@@ -750,7 +755,9 @@
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
 
+  let showGen = 0; // verhoogd bij stoppen; lopende acties zien zo dat ze moeten ophouden
   function stop() {
+    showGen++;
     $('captionEdit').hidden = true;
     $('caption').textContent = '';
     $('place').textContent = '';
@@ -1155,7 +1162,7 @@
         const o = ifd + 2 + i * 12;
         entries.push({ tag: dv.getUint16(o, le), type: dv.getUint16(o + 2, le), count: dv.getUint32(o + 4, le), at: o });
       }
-      return { dv, le, entries, next: dv.getUint32(ifd + 2 + n * 12, le) };
+      return { dv, le, ifd, entries, next: dv.getUint32(ifd + 2 + n * 12, le) };
     }
 
     function valueOf(t, e) {
@@ -1231,7 +1238,7 @@
       const place = setPlace ? changes.place.trim() : '';
       const orient = changes.orientation;
 
-      let le = true, oldTiff = null, keep = [], t = null;
+      let le = true, oldTiff = null, fullTiff = null, keep = [], t = null;
       if (info.seg >= 0) {
         t = parse(b, info);
         le = t.le;
@@ -1242,9 +1249,25 @@
           new DataView(copy.buffer, copy.byteOffset + info.tiff).setUint16(o.at + 8, orient, le);
           return copy;
         }
-        oldTiff = b.subarray(info.tiff, info.segEnd);
+        fullTiff = b.subarray(info.tiff, info.segEnd);
         keep = t.entries.filter((e) => !(setCaption && (e.tag === DESC || e.tag === XPTITLE)) &&
           !(setPlace && e.tag === XPSUBJECT) && !(orient && e.tag === ORIENT));
+        // Ruimte terugwinnen: staat IFD0 al achteraan (door een eerdere wijziging) en wijst geen
+        // andere lijst (Exif, GPS, voorbeeldafbeelding) naar die plek of daarna, dan mag alles
+        // vanaf IFD0 weg; waarden die daar stonden en blijven, verhuizen mee naar achteren.
+        // Zo groeit de metadata niet bij elke wijziging. Anders blijft alles staan.
+        const POINTERS = [0x8769, 0x8825, 0xA005, 0x0201];
+        const below = (v) => v < t.ifd;
+        const outOfLine = (e) => (SIZE[e.type] || 1) * e.count > 4;
+        const reclaim = t.ifd > 8 && below(t.next) &&
+          keep.every((e) => !POINTERS.includes(e.tag) || below(t.dv.getUint32(e.at + 8, le)));
+        if (reclaim) {
+          keep = keep.map((e) => {
+            if (POINTERS.includes(e.tag) || !outOfLine(e) || below(t.dv.getUint32(e.at + 8, le))) return e;
+            return { ...e, move: valueOf(t, e).slice() }; // waarde meenemen
+          });
+        }
+        oldTiff = reclaim ? fullTiff.subarray(0, t.ifd) : fullTiff;
       }
 
       // Nieuwe waarden
@@ -1271,7 +1294,7 @@
       const base = oldTiff ? oldTiff.length : 8;
       const ifdAt = base + (base & 1); // even beginnen
       const all = [
-        ...keep.map((e) => ({ tag: e.tag, old: e })),
+        ...keep.map((e) => (e.move ? { tag: e.tag, add: { tag: e.tag, type: e.type, count: e.count, data: e.move } } : { tag: e.tag, old: e })),
         ...added.map((e) => ({ tag: e.tag, add: e })),
       ].sort((x, y) => x.tag - y.tag);
       const ifdLen = 2 + all.length * 12 + 4;
@@ -1295,7 +1318,7 @@
         const o = ifdAt + 2 + i * 12;
         if (x.old) {
           // Ongewijzigd overnemen: tag, type, aantal en waarde/verwijzing zoals ze waren
-          tiff.set(oldTiff.subarray(x.old.at, x.old.at + 12), o);
+          tiff.set(fullTiff.subarray(x.old.at, x.old.at + 12), o);
         } else {
           const e = x.add;
           dv.setUint16(o, e.tag, le); dv.setUint16(o + 2, e.type, le); dv.setUint32(o + 4, e.count, le);
@@ -1337,30 +1360,38 @@
   // Houdt het hulpprogramma in leven zolang de voorstelling open is
   if (helper) setInterval(() => { fetch(helperUrl('ping')).catch(() => {}); }, 30000);
 
-  const metaCache = new Map(); // pad -> { caption, orientation }
+  const metaCache = new Map(); // bestand -> gelezen metadata
+  // Zelf gekozen bestanden kunnen dezelfde naam hebben (IMG_0001.JPG uit twee mappen)
+  const metaKey = (m) => (m.file ? `${m.path}|${m.file.size}|${m.file.lastModified}` : m.path);
+  async function helperFetch(url, opts) {
+    try { return await fetch(url, opts); } catch {
+      throw new Error('het hulpprogramma reageert niet. Sluit de diavoorstelling en dubbelklik opnieuw op Diavoorstelling.bat');
+    }
+  }
   async function fileBytes(m, headOnly) {
     if (m.file) {
       const part = headOnly ? m.file.slice(0, 256 * 1024) : m.file;
       return new Uint8Array(await part.arrayBuffer());
     }
     if (!helper) return null;
-    const r = await fetch(helperUrl('bestand', m, headOnly ? '&kop=1' : ''), { cache: 'no-store' });
+    const r = await helperFetch(helperUrl('bestand', m, headOnly ? '&kop=1' : ''), { cache: 'no-store' });
     if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
     return new Uint8Array(await r.arrayBuffer());
   }
   async function metaOf(m) {
     if (!isJpeg(m)) return null;
-    if (metaCache.has(m.path)) return metaCache.get(m.path);
+    if (metaCache.has(metaKey(m))) return metaCache.get(metaKey(m));
     let meta = null;
     try {
       const b = await fileBytes(m, true);
       if (b) meta = Exif.read(b);
     } catch {}
-    if (meta) metaCache.set(m.path, meta);
+    if (meta) metaCache.set(metaKey(m), meta);
     return meta;
   }
 
-  const currentMedia = () => (order.length ? media[order[pos]] : null);
+  // De foto die echt in beeld is (tijdens het laden van de volgende is pos al verder)
+  const currentMedia = () => (shownIdx >= 0 ? media[shownIdx] || null : null);
   const updateOverlay = () => $('overlay').classList.toggle('empty', !$('caption').textContent && !$('place').textContent);
 
   // ---------- Plaatsnaam uit GPS (OpenStreetMap), onthouden per plek ----------
@@ -1409,6 +1440,7 @@
     const c = $('caption'), pl = $('place');
     c.textContent = ''; pl.textContent = '';
     updateOverlay();
+    if (!settings.captions && !settings.showPlace) return;
     const meta = await metaOf(m);
     if (m !== currentMedia()) return;
     c.textContent = settings.captions && meta ? meta.caption : '';
@@ -1433,14 +1465,19 @@
   function changePhoto(m, changes) {
     const job = writeQueue.then(async () => {
       const bytes = await fileBytes(m, false);
+      const now = Exif.read(bytes);
+      const same = (typeof changes.caption !== 'string' || now.caption === changes.caption.trim()) &&
+        (typeof changes.place !== 'string' || now.place === changes.place.trim()) &&
+        (!changes.orientation || now.orientation === changes.orientation);
+      if (same) { metaCache.set(metaKey(m), now); return now; } // niets veranderd: bestand niet aanraken
       const updated = Exif.write(bytes, changes);
       const check = Exif.read(updated);
       if (typeof changes.caption === 'string' && check.caption !== changes.caption.trim()) throw new Error('Controle mislukt');
       if (changes.orientation && check.orientation !== changes.orientation) throw new Error('Controle mislukt');
       if (typeof changes.place === 'string' && check.place !== changes.place.trim()) throw new Error('Controle mislukt');
-      const r = await fetch(helperUrl('bestand', m), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: updated });
+      const r = await helperFetch(helperUrl('bestand', m), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: updated });
       if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
-      metaCache.set(m.path, check);
+      metaCache.set(metaKey(m), check);
       m.version = (m.version || 0) + 1; // nieuwe versie laden (niet uit de cache)
       return check;
     });
@@ -1450,6 +1487,8 @@
 
   let captionWasPlaying = false;
   let editField = 'caption'; // 'caption' (bijschrift) of 'place' (plek)
+  let editTarget = null;     // de foto waarvoor het tekstvak geopend is
+  let editSession = 0;
   const captionEditing = () => !$('captionEdit').hidden;
   async function openCaptionEditor(field = 'caption') {
     const m = currentMedia();
@@ -1457,6 +1496,8 @@
     const why = whyNotWritable(m);
     if (why) { toast(why, 2500); return; }
     editField = field;
+    editTarget = m;
+    const session = ++editSession;
     captionWasPlaying = playing;
     if (playing) pausePlayback();
     pokeUI();
@@ -1473,12 +1514,18 @@
     input.focus();
     const meta = await metaOf(m);
     // Plek: begin met wat nu getoond wordt (ook een opgezochte plaatsnaam), zodat je hem kunt aanpassen
-    input.value = !meta ? '' : isPlace ? await placeOf(meta) : meta.caption;
+    const value = !meta ? '' : isPlace ? await placeOf(meta) : meta.caption;
+    // Alleen invullen als dit tekstvak nog open is en je nog niets getypt hebt
+    if (session !== editSession || !captionEditing() || input.value !== '') return;
+    input.value = value;
     input.select();
   }
   async function closeCaptionEditor(saveIt) {
     if (!captionEditing()) return;
-    const m = currentMedia();
+    const m = editTarget;
+    editTarget = null;
+    editSession++;
+    const gen = showGen;
     const text = $('captionInput').value.trim();
     $('captionEdit').hidden = true;
     show.focus({ preventScroll: true });
@@ -1497,6 +1544,7 @@
         toast(`Kon de foto niet opslaan: ${err.message}`, 4000);
       }
     }
+    if (gen !== showGen) return; // intussen gestopt
     showCaption();
     if (captionWasPlaying) resumePlayback();
   }
@@ -1507,18 +1555,21 @@
     if (why) { toast(why, 2500); return; }
     // Niet doorschuiven terwijl we draaien
     const wasPlaying = playing;
+    const gen = showGen;
     if (playing) pausePlayback();
     try {
       const meta = await metaOf(m);
       const next = Exif.rotateRight(meta ? meta.orientation : 1);
-      metaCache.set(m.path, { ...(meta || { caption: '' }), orientation: next }); // snel nog eens drukken
+      metaCache.set(metaKey(m), { ...(meta || { caption: '' }), orientation: next }); // snel nog eens drukken
       await changePhoto(m, { orientation: next });
-      if (m === currentMedia()) display(0); // opnieuw laden in de nieuwe stand
+      if (gen !== showGen) return; // intussen gestopt
+      if (m === currentMedia()) { pos = Math.max(0, order.indexOf(shownIdx)); display(0); } // opnieuw in de nieuwe stand
       toast('Foto gedraaid');
     } catch (err) {
-      metaCache.delete(m.path);
+      metaCache.delete(metaKey(m));
       toast(`Kon de foto niet draaien: ${err.message}`, 4000);
     }
+    if (gen !== showGen) return;
     if (wasPlaying) resumePlayback();
   }
 
@@ -1594,7 +1645,7 @@
     const m = media[Number(btn.dataset.idx)];
     if (!m || m.type !== 'image') return;
     const img = btn.querySelector('img');
-    if (m.src) { if (!img.getAttribute('src')) img.src = m.version ? `${m.src}?v=${m.version}` : m.src; return; }
+    if (m.src) { if (!img.getAttribute('src')) img.src = srcOf(m); return; }
     const u = URL.createObjectURL(m.file);
     thumbUrls.set(btn, u);
     img.src = u;
@@ -1741,7 +1792,7 @@
   // Enkele klik pas na korte tijd uitvoeren, zodat een dubbelklik alleen volledig scherm wisselt
   let clickTimer = null;
   show.addEventListener('click', (e) => {
-    if (!e.target.isConnected || e.target.closest('#bar, #grid, #captionEdit')) return;
+    if (!e.target.isConnected || e.target.closest('#bar, #grid, #captionEdit') || captionEditing()) return;
     pokeUI();
     clearTimeout(clickTimer);
     clickTimer = null;
@@ -1812,6 +1863,11 @@
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (captionEditing()) {
+      // Tekstvak open maar focus ergens anders: alleen Esc (annuleren) doet iets
+      if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+      return;
+    }
     if (gridOpen()) {
       if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') { e.preventDefault(); closeGrid(null); }
       else if (gridKey(e)) e.preventDefault();
