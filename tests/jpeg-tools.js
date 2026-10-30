@@ -56,6 +56,7 @@ function readMeta(buf) {
   const str = (e) => (e ? e.raw.toString('latin1').replace(/\0+$/, '') : null);
   const out = {
     xptitle: t.has(0x9c9b) ? t.get(0x9c9b).raw.toString('utf16le').replace(/\0+$/, '') : null,
+    xpsubject: t.has(0x9c9f) ? t.get(0x9c9f).raw.toString('utf16le').replace(/\0+$/, '') : null,
     description: str(t.get(0x010e)),
     orientation: t.has(0x0112) ? t.get(0x0112).short : null,
     make: str(t.get(0x010f)),
@@ -125,7 +126,12 @@ function withCameraExif(jpg, { le, thumbnail }) {
     const exif = (at) => ifd([[0x9003, 2, 20, s('2024:07:01 11:59:58')]], at, 0);
     const exifAt = 8 + len0;
     const gpsAt = exifAt + exif(exifAt).length;
-    const gps = ifd([[0x0001, 2, 2, s('N')]], gpsAt, 0);
+    // Utrecht: 52°5'27" N, 5°7'18" E
+    const rat = (...pairs) => { const b = Buffer.alloc(pairs.length * 8); pairs.forEach(([n, d], i) => { w32(b, i * 8, n); w32(b, i * 8 + 4, d); }); return b; };
+    const gps = ifd([
+      [0x0001, 2, 2, s('N')], [0x0002, 5, 3, rat([52, 1], [5, 1], [27, 1])],
+      [0x0003, 2, 2, s('E')], [0x0004, 5, 3, rat([5, 1], [7, 1], [18, 1])],
+    ], gpsAt, 0);
     tiff = Buffer.concat([Buffer.from('II*\0', 'latin1'), long(8), build(exifAt, gpsAt), exif(exifAt), gps]);
   } else {
     const ifd0 = (next) => ifd([[0x010f, 2, 18, s('NIKON CORPORATION')]], 8, next);

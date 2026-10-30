@@ -77,8 +77,19 @@ GPS-gegevens blijven behouden. De datum van het bestand blijft ook gelijk.
   stopt vanzelf als de voorstelling dicht is. In de online versie worden
   teksten wel getoond, maar niet opgeslagen.
 
-Met **Teksten bij foto's tonen** op het instellingenscherm zet je alle teksten
-aan of uit.
+### Plek
+
+Heeft een foto GPS-gegevens (de meeste telefoonfoto's), dan staat onder in
+beeld waar hij gemaakt is, bijvoorbeeld *📍 Utrecht*. De plaatsnaam wordt
+opgezocht bij [OpenStreetMap](https://www.openstreetmap.org/); alleen de
+coördinaten worden verstuurd, niet de foto. Opgezochte namen worden onthouden.
+Met `P` (of de speld in de balk) pas je de plek zelf aan; die wordt in de foto
+opgeslagen (Windows: *Onderwerp*). Leegmaken zet de plaatsnaam uit de
+GPS-gegevens terug.
+
+Op het instellingenscherm zet je los van elkaar aan of uit:
+**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht) en
+**Bestandsnaam tonen** (linksboven, standaard uit).
 
 Instellingen worden onthouden in de browser (`localStorage`).
 
@@ -96,7 +107,8 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `S` | Willekeurige volgorde aan/uit |
 | `A` | Bewegende foto's aan/uit |
 | `V` | Scherm vullen aan/uit |
-| `T` | Tekst bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
+| `T` | Bijschrift bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
+| `P` | Plek aanpassen (wordt in de foto opgeslagen) |
 | `R` | Foto een kwartslag rechtsom draaien (wordt in de foto opgeslagen) |
 | `G` | Miniatuuroverzicht openen/sluiten |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |

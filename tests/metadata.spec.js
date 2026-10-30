@@ -14,6 +14,17 @@ const MEDIA = () => process.env.DIASHOW_MEDIA || '';
 const TOKEN = 'geheim-test-token';
 
 const test = base.test.extend({
+  // OpenStreetMap nabootsen: geen echte verzoeken naar internet vanuit de tests
+  osm: [async ({ page }, use) => {
+    const calls = [];
+    await page.route('https://nominatim.openstreetmap.org/**', (route) => {
+      const u = new URL(route.request().url());
+      calls.push({ lat: Number(u.searchParams.get('lat')), lon: Number(u.searchParams.get('lon')) });
+      route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ name: 'Utrecht', address: { city: 'Utrecht', country: 'Nederland', country_code: 'nl' } }) });
+    });
+    await use(calls);
+  }, { auto: true }],
   pageErrors: [async ({ page }, use) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(String(err && err.stack || err)));
@@ -309,5 +320,106 @@ test.describe('tekstvak (bediening)', () => {
         return !!c && !!b && c.x >= 0 && c.x + c.width <= 390 && textBottom <= b.y;
       }).toBe(true);
     } finally { await env.cleanup(); }
+  });
+});
+
+
+test.describe('plek en bestandsnaam', () => {
+  test('the place is looked up from GPS once, shown with the caption, and can be edited (stored in the photo)', async ({ page, osm }) => {
+    const env = await setup();
+    try {
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      expect(osm.length).toBe(1);
+      expect(osm[0].lat).toBeCloseTo(52.0908, 3);
+      expect(osm[0].lon).toBeCloseTo(5.1217, 3);
+
+      // Terug naar dezelfde foto: geen nieuw verzoek (onthouden)
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('foto1.png');
+      await expect(page.locator('#place')).toHaveText('');
+      await page.keyboard.press('ArrowLeft');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      expect(osm.length).toBe(1);
+
+      // Zelf aanpassen met P: begint met de opgezochte naam
+      await page.keyboard.press('p');
+      await expect(page.locator('#editTitle')).toHaveText('Plek waar deze foto gemaakt is');
+      await expect(page.locator('#captionInput')).toHaveValue('Utrecht');
+      await page.fill('#captionInput', 'Camping De Berk, Ommen');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#toast')).toHaveText('Plek opgeslagen in de foto');
+      await expect(page.locator('#place')).toHaveText('Camping De Berk, Ommen');
+      const meta = readMeta(env.file('canon.jpg'));
+      expect(meta.xpsubject).toBe('Camping De Berk, Ommen'); // Windows: Onderwerp
+      expect(meta.gpsRef).toBe('N'); // GPS blijft staan
+
+      // Bijschrift erbij: beide te zien
+      await page.keyboard.press('t');
+      await page.keyboard.type('zo nog even de tuin grasmaaien');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#caption')).toHaveText('zo nog even de tuin grasmaaien');
+      await expect(page.locator('#place')).toHaveText('Camping De Berk, Ommen');
+      expect(readMeta(env.file('canon.jpg')).xpsubject).toBe('Camping De Berk, Ommen');
+
+      // Plek leegmaken: terug naar de plaatsnaam uit de GPS-gegevens
+      await page.keyboard.press('p');
+      await page.fill('#captionInput', '');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#toast')).toHaveText('Plek weggehaald');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      expect(readMeta(env.file('canon.jpg')).xpsubject).toBe(null);
+    } finally { await env.cleanup(); }
+  });
+
+  test('separate switches: place off means no lookups; file name and caption can be toggled independently', async ({ page, osm }) => {
+    const env = await setup();
+    try {
+      // Bijschrift in de foto zetten, met alles aan
+      await openShow(page, env, 'canon.jpg');
+      await page.keyboard.press('t');
+      await page.keyboard.type('Met bijschrift');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#caption')).toHaveText('Met bijschrift');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      const nameOpacity = () => page.evaluate(() => getComputedStyle(document.getElementById('info')).opacity);
+      expect(await nameOpacity()).toBe('0'); // bestandsnaam staat standaard uit
+
+      // Instellingen: plek uit, bestandsnaam aan, bijschrift aan
+      await page.keyboard.press('Escape');
+      await page.uncheck('#showPlace');
+      await page.check('#showName');
+      await page.evaluate(() => localStorage.removeItem('diashow-plaatsnamen'));
+      const before = osm.length;
+      await page.reload();
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#caption')).toHaveText('Met bijschrift');
+      await expect(page.locator('#place')).toBeHidden();
+      expect(osm.length).toBe(before); // niets opgezocht
+      await expect.poll(nameOpacity).toBe('1');
+      await expect(page.locator('#name')).toHaveText('canon.jpg');
+
+      // Bijschrift uit, plek weer aan
+      await page.keyboard.press('Escape');
+      await page.uncheck('#captions');
+      await page.check('#showPlace');
+      await page.click('#startBtn');
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Home');
+      await expect(page.locator('#name')).toHaveText('canon.jpg');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      await expect(page.locator('#caption')).toBeHidden();
+    } finally { await env.cleanup(); }
+  });
+
+  test('EXIF: GPS position is read from the GPS list', async ({ page }) => {
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+    const jpg = [...fs.readFileSync(path.join(MEDIA(), 'canon.jpg'))];
+    const gps = await page.evaluate((input) => /** @type {any} */ (window).diashow.exif.read(new Uint8Array(input)).gps, jpg);
+    expect(gps.lat).toBeCloseTo(52 + 5 / 60 + 27 / 3600, 6);
+    expect(gps.lon).toBeCloseTo(5 + 7 / 60 + 18 / 3600, 6);
+    const none = await page.evaluate((input) => /** @type {any} */ (window).diashow.exif.read(new Uint8Array(input)).gps,
+      [...fs.readFileSync(path.join(MEDIA(), 'nikon.jpg'))]);
+    expect(none).toBe(null);
   });
 });

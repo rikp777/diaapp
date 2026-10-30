@@ -66,6 +66,11 @@ const token = () => /DIASHOW_TOKEN = '([^']+)'/.exec(lijst)[1];
 const file = (f) => fs.readFileSync(path.join(photos, f));
 
 async function openAt(page, name) {
+  // OpenStreetMap nabootsen (tuin.jpg heeft GPS); de test hangt niet van internet af
+  await page.route('https://nominatim.openstreetmap.org/**', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ address: { city: 'Utrecht', country: 'Nederland', country_code: 'nl' } }),
+  }));
   await page.goto(pathToFileURL(path.join(APP_DIR, 'index.html')).href);
   await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
   await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
@@ -117,9 +122,18 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   const attrib = execFileSync('cmd.exe', ['/c', 'attrib', path.join(photos, 'Diavoorstelling-originelen')]).toString();
   expect(attrib).toMatch(/\bH\b/);
 
-  // Opnieuw openen: de tekst komt uit de foto zelf
+  // Opnieuw openen: de tekst komt uit de foto zelf; de plek uit de GPS-gegevens
   await openAt(page, 'tuin.jpg');
   await expect(page.locator('#caption')).toHaveText('Zo nog even de tuin grasmaaien – één keer');
+  await expect(page.locator('#place')).toHaveText('Utrecht');
+
+  // Plek zelf aanpassen
+  await page.keyboard.press('p');
+  await page.fill('#captionInput', 'Camping De Berk, Ommen');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#toast')).toHaveText('Plek opgeslagen in de foto', { timeout: 15_000 });
+  expect(readMeta(file('tuin.jpg')).xpsubject).toBe('Camping De Berk, Ommen');
+  expect(readMeta(file('tuin.jpg')).xptitle).toBe('Zo nog even de tuin grasmaaien – één keer');
 });
 
 test('Edge rotates a photo in a subfolder via the real helper', async ({ page }) => {
