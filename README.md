@@ -112,13 +112,21 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `T` | Bijschrift bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
 | `P` | Plek aanpassen (wordt in de foto opgeslagen) |
 | `R` | Foto een kwartslag rechtsom draaien (wordt in de foto opgeslagen) |
-| `G` | Miniatuuroverzicht openen/sluiten |
+| `G` | Overzicht openen/sluiten: alle foto's per map, met zoekvak; klik opent een foto in pauze om te bewerken |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
 
 Beweeg de muis om de bedieningsbalk te tonen (met o.a. een volumeschuif); als
-de muis stilstaat verdwijnt hij weer. In het **miniatuuroverzicht** klik je op
-een miniatuur om naar die dia te springen; miniaturen worden pas geladen als ze
-in beeld komen.
+de muis stilstaat verdwijnt hij weer. 
+
+### Een foto zoeken en bewerken
+
+Het **overzicht** (`G`, de knop met de vier vakjes, of **Foto zoeken en
+bewerken** op het instellingenscherm) toont alle foto's en filmpjes, per map.
+Typ in het zoekvak een deel van de naam of de map (bijvoorbeeld *strand* of
+*2024*). Klik op een foto (of druk `Enter` voor de eerste treffer): die opent
+**in pauze**, zodat je meteen een bijschrift (`T`), plek (`P`) of draaiing (`R`)
+kunt geven. `Spatie` laat de voorstelling weer lopen. Miniaturen worden pas
+geladen als ze in beeld komen.
 
 ## Goed om te weten
 

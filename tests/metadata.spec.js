@@ -564,3 +564,93 @@ test.describe('na code review', () => {
     } finally { await env.cleanup(); }
   });
 });
+
+test.describe('foto zoeken en bewerken', () => {
+  async function setupFolders() {
+    const env = await setup();
+    fs.mkdirSync(path.join(env.photos, 'Vakantie 2024'));
+    fs.copyFileSync(path.join(MEDIA(), 'zonder-exif.jpg'), path.join(env.photos, 'Vakantie 2024', 'strand.jpg'));
+    const lijstPad = path.join(path.dirname(new URL(env.url).pathname), 'diashow-lijst.js');
+    const lijst = fs.readFileSync(lijstPad, 'utf8').replace(/DIASHOW_FILES = .*;/,
+      `DIASHOW_FILES = ${JSON.stringify(['canon.jpg', 'foto1.png', 'nikon.jpg', 'Vakantie 2024/strand.jpg', 'zonder-exif.jpg'])};`);
+    fs.writeFileSync(lijstPad, lijst);
+    return env;
+  }
+
+  test('overview groups by folder, search filters by name or folder, and a click opens the photo paused', async ({ page }) => {
+    const env = await setupFolders();
+    try {
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).diashow.state.count)).toBe(5);
+      await page.keyboard.press('g');
+      await expect(page.locator('#grid')).toBeVisible();
+      // Eén kop per map
+      await expect(page.locator('.grid-folder')).toHaveText(['📁 Deze map', '📁 Vakantie 2024']);
+      await expect(page.locator('.thumb')).toHaveCount(5);
+
+      // Zoeken op mapnaam en op bestandsnaam; typen sluit het overzicht niet (g/G)
+      await page.click('#gridSearch');
+      await page.keyboard.type('vakantie');
+      await expect(page.locator('.thumb:visible')).toHaveCount(1);
+      await expect(page.locator('.grid-folder:visible')).toHaveText(['📁 Vakantie 2024']);
+      await page.fill('#gridSearch', 'nikon');
+      await expect(page.locator('.thumb:visible')).toHaveCount(1);
+      await page.fill('#gridSearch', 'bestaat niet');
+      await expect(page.locator('#gridEmpty')).toBeVisible();
+      await page.fill('#gridSearch', 'STRAND');
+      await expect(page.locator('.thumb:visible')).toHaveCount(1);
+      await expect(page.locator('#grid')).toBeVisible();
+
+      // Enter opent de eerste treffer, in pauze
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#grid')).toBeHidden();
+      await expect(page.locator('#name')).toHaveText('Vakantie 2024/strand.jpg');
+      expect(await page.evaluate(() => /** @type {any} */ (window).diashow.state.playing)).toBe(false);
+      await page.waitForTimeout(1500);
+      await expect(page.locator('#name')).toHaveText('Vakantie 2024/strand.jpg'); // schuift niet door
+
+      // Meteen bewerken
+      await page.keyboard.press('t');
+      await page.keyboard.type('Strand in Zeeland');
+      await page.keyboard.press('Enter');
+      await expect.poll(() => readMeta(env.file(path.join('Vakantie 2024', 'strand.jpg'))).xptitle).toBe('Strand in Zeeland');
+    } finally { await env.cleanup(); }
+  });
+
+  test('Esc in the search box first clears it, then closes the overview', async ({ page }) => {
+    const env = await setupFolders();
+    try {
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await page.keyboard.press('g');
+      await page.click('#gridSearch');
+      await page.keyboard.type('canon');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#gridSearch')).toHaveValue('');
+      await expect(page.locator('#grid')).toBeVisible();
+      await expect(page.locator('.thumb:visible')).toHaveCount(5);
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#grid')).toBeHidden();
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+    } finally { await env.cleanup(); }
+  });
+
+  test('"Foto zoeken en bewerken" on the settings screen opens the overview, paused', async ({ page }) => {
+    const env = await setupFolders();
+    try {
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#start')).toBeVisible();
+      await expect(page.locator('#browseBtn')).toBeEnabled();
+      await page.click('#browseBtn');
+      await expect(page.locator('#grid')).toBeVisible();
+      expect(await page.evaluate(() => /** @type {any} */ (window).diashow.state.playing)).toBe(false);
+      await page.locator('.thumb[data-pos="2"]').click();
+      await expect(page.locator('#name')).toHaveText('nikon.jpg');
+      expect(await page.evaluate(() => /** @type {any} */ (window).diashow.state.playing)).toBe(false);
+    } finally { await env.cleanup(); }
+  });
+});

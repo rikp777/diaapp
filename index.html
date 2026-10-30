@@ -207,6 +207,17 @@
     padding: 10px 16px; border-bottom: 1px solid var(--border);
   }
   .grid-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+  #gridSearch {
+    flex: 1 1 auto; min-width: 0; max-width: 420px; padding: 8px 10px;
+    background: #09090b; border: 1px solid var(--border); border-radius: 8px;
+  }
+  .grid-folder {
+    grid-column: 1 / -1; margin: 10px 0 0; font-size: 14px; font-weight: 600; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .grid-folder:first-child { margin-top: 0; }
+  .grid-folder[hidden], .thumb[hidden] { display: none; }
+  #gridEmpty { margin: 24px 16px; color: var(--muted); }
   #gridItems {
     flex: 1; overflow-y: auto; overflow-x: hidden;
     padding: 16px;
@@ -314,6 +325,7 @@
 
     <div class="pick-row">
       <button class="btn primary" id="startBtn" type="button" disabled>Diavoorstelling starten</button>
+      <button class="btn" id="browseBtn" type="button" disabled>Foto zoeken en bewerken</button>
     </div>
 
     <div class="keys">
@@ -400,11 +412,13 @@
   <div id="grid" role="dialog" aria-modal="true" aria-labelledby="gridTitle" hidden>
     <div class="grid-head">
       <h2 id="gridTitle">Overzicht</h2>
+      <input type="search" id="gridSearch" placeholder="Zoek op naam of map…" aria-label="Zoek op naam of map" autocomplete="off">
       <button class="icon" id="gridClose" type="button" title="Sluiten (Esc)" aria-label="Overzicht sluiten">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
     <div id="gridItems"></div>
+    <p id="gridEmpty" hidden>Niets gevonden.</p>
   </div>
 </section>
 
@@ -555,6 +569,7 @@
     else if (!usable.length) text += '.';
     $('count').textContent = text;
     $('startBtn').disabled = !usable.length;
+    $('browseBtn').disabled = !usable.length;
   }
 
   async function setFiles(files) {
@@ -565,6 +580,7 @@
     source = 'bestanden';
     const list = [...files].map((file) => ({ file, path: pathOf(file), type: kindOf(file) })).filter((m) => m.type);
     $('startBtn').disabled = true;
+    $('browseBtn').disabled = true;
     if (list.length) $('count').textContent = 'Bestanden controleren…';
     const ok = await filterSupported(list, gen);
     if (gen !== loadGen) return;
@@ -1665,17 +1681,38 @@
 
   function openGrid() {
     if (gridOpen() || !order.length) return;
+    $('gridSearch').value = '';
     gridWasPlaying = playing;
     if (playing) pausePlayback();
     gridReturnFocus = document.activeElement;
     const frag = document.createDocumentFragment();
-    order.forEach((idx, p) => {
+    // Mapkoppen (alleen bij vaste volgorde en als er submappen zijn)
+    const folderOf = (m) => (m.path.includes('/') ? m.path.slice(0, m.path.lastIndexOf('/')) : '');
+    const withFolders = !settings.shuffle && order.some((idx) => folderOf(media[idx]) !== folderOf(media[order[0]]));
+    // Per map groeperen (in volgorde van eerste voorkomen), zodat elke map één kop heeft
+    const items = order.map((idx, p) => ({ idx, p }));
+    if (withFolders) {
+      const rank = new Map();
+      for (const it of items) { const f = folderOf(media[it.idx]); if (!rank.has(f)) rank.set(f, rank.size); }
+      items.sort((x, y) => rank.get(folderOf(media[x.idx])) - rank.get(folderOf(media[y.idx])) || x.p - y.p);
+    }
+    let lastFolder = null;
+    items.forEach(({ idx, p }) => {
       const m = media[idx];
+      if (withFolders && folderOf(m) !== lastFolder) {
+        lastFolder = folderOf(m);
+        const h = document.createElement('h3');
+        h.className = 'grid-folder';
+        h.dataset.folder = lastFolder;
+        h.textContent = lastFolder ? `\u{1F4C1} ${lastFolder}` : '\u{1F4C1} Deze map';
+        frag.appendChild(h);
+      }
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'thumb' + (p === pos ? ' current' : '');
       b.dataset.pos = String(p);
       b.dataset.idx = String(idx);
+      b.dataset.search = normalize(m.path);
       b.setAttribute('aria-label', `${p + 1}. ${baseName(m)}${m.type === 'video' ? ' (filmpje)' : ''}`);
       if (p === pos) b.setAttribute('aria-current', 'true');
       if (m.type === 'image') {
@@ -1696,6 +1733,7 @@
     });
     gridItems.innerHTML = '';
     gridItems.appendChild(frag);
+    filterGrid();
     grid.hidden = false;
     grid.classList.add('open');
     bar.inert = true;
@@ -1730,10 +1768,12 @@
     gridItems.innerHTML = '';
     if (!resume) return;
     if (jumpPos != null && jumpPos >= 0 && jumpPos < order.length) {
-      playing = gridWasPlaying;
+      // Gekozen foto openen in pauze, zodat je hem rustig kunt bekijken of bewerken
+      playing = false;
       updateButtons();
       pos = jumpPos;
       display(0);
+      toast('Gepauzeerd · T bijschrift · P plek · R draaien · spatie = verder', 2600);
     } else if (gridWasPlaying) {
       resumePlayback();
     }
@@ -1745,6 +1785,39 @@
 
   function toggleGrid() { if (gridOpen()) closeGrid(null); else openGrid(); }
 
+  // Zoeken op naam of map (hoofdletters en accenten maken niet uit)
+  const normalize = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const visibleThumbs = () => [...gridItems.querySelectorAll('.thumb:not([hidden])')];
+  function filterGrid() {
+    const words = normalize($('gridSearch').value).split(/\s+/).filter(Boolean);
+    let any = false;
+    for (const el of gridItems.children) {
+      if (!el.classList.contains('thumb')) continue;
+      el.hidden = !words.every((w) => el.dataset.search.includes(w));
+      any = any || !el.hidden;
+    }
+    // Mapkop alleen tonen als er in die map iets zichtbaar is
+    for (const h of gridItems.querySelectorAll('.grid-folder')) {
+      let n = h.nextElementSibling, show = false;
+      while (n && n.classList.contains('thumb')) { if (!n.hidden) { show = true; break; } n = n.nextElementSibling; }
+      h.hidden = !show;
+    }
+    $('gridEmpty').hidden = any;
+  }
+  $('gridSearch').addEventListener('input', () => { filterGrid(); gridItems.scrollTop = 0; });
+  $('gridSearch').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // Eerst de zoektekst wissen, daarna pas het overzicht sluiten
+      if (e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; filterGrid(); }
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      const first = visibleThumbs()[0];
+      if (first) { e.preventDefault(); if (e.key === 'Enter') first.click(); else first.focus(); }
+    }
+    e.stopPropagation(); // typen in het zoekvak is geen sneltoets
+  });
+
   // Klikken in het overzicht niet doorgeven aan de voorstelling (die zou vorige/volgende doen)
   grid.addEventListener('click', (e) => e.stopPropagation());
   grid.addEventListener('dblclick', (e) => e.stopPropagation());
@@ -1755,7 +1828,7 @@
   $('gridClose').onclick = () => closeGrid(null);
 
   function gridKey(e) {
-    const thumbs = [...gridItems.children];
+    const thumbs = visibleThumbs();
     if (!thumbs.length) return false;
     let i = thumbs.indexOf(document.activeElement);
     const cols = Math.max(1, getComputedStyle(gridItems).gridTemplateColumns.split(' ').filter(Boolean).length);
@@ -1819,6 +1892,13 @@
   bar.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
 
   $('startBtn').onclick = start;
+  // Starten in pauze en meteen het overzicht openen, om een foto te zoeken en te bewerken
+  $('browseBtn').onclick = () => {
+    start();
+    if (!show.classList.contains('active')) return;
+    pausePlayback();
+    openGrid();
+  };
   $('prevBtn').onclick = () => display(-1);
   $('nextBtn').onclick = () => display(1);
   $('playBtn').onclick = togglePlay;
