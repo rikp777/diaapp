@@ -89,9 +89,27 @@ Met `P` (of de speld in de balk) pas je de plek zelf aan; die wordt in de foto
 opgeslagen (Windows: *Onderwerp*). Leegmaken zet de plaatsnaam uit de
 GPS-gegevens terug.
 
+### Dubbele foto's en Live Photos
+
+- **Precies dezelfde foto** (bijvoorbeeld in twee mappen, of gekopieerd als
+  *IMG_1234 (1).jpg*) wordt maar één keer getoond. Alleen bestanden met
+  exact dezelfde inhoud tellen als dubbel; de naam zonder *(1)* of *kopie*
+  krijgt de voorkeur.
+- **iPhone Live Photos** bestaan uit een foto én een kort filmpje met dezelfde
+  naam (*IMG_1234.JPG* + *IMG_1234.MOV*). Het filmpje wordt overgeslagen; met
+  **Live Photo-filmpjes overslaan** op het instellingenscherm zet je dat uit.
+
+Het startscherm meldt hoeveel er zijn overgeslagen.
+
+### Datum
+
+Naast de plek staat wanneer de foto gemaakt is, bijvoorbeeld *📅 1 juli 2024*:
+de opnamedatum uit de foto zelf (EXIF), of anders de datum van het bestand
+(bij filmpjes en foto's zonder opnamedatum).
+
 Op het instellingenscherm zet je los van elkaar aan of uit:
-**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht) en
-**Bestandsnaam tonen** (linksboven, standaard uit).
+**Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht),
+**Datum tonen** en **Bestandsnaam tonen** (linksboven, standaard uit).
 
 Instellingen worden onthouden in de browser (`localStorage`).
 

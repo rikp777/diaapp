@@ -14,6 +14,8 @@ $sep = [IO.Path]::DirectorySeparatorChar
 $backupNaam = 'Diavoorstelling-originelen'
 
 function Melding($tekst) {
+  # In de automatische test geen venster (dat zou onzichtbaar blijven wachten), maar uitvoer
+  if ($env:DIA_GEEN_BROWSER) { [Console]::Error.WriteLine("MELDING: $tekst"); return }
   try {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show($tekst, 'Diavoorstelling') | Out-Null
@@ -218,7 +220,7 @@ try {
   $soorten = @('jpg','jpeg','jfif','png','apng','gif','webp','bmp','avif','svg','ico','heic','heif','tif','tiff',
                'mp4','m4v','webm','mov','mkv','ogv','avi','3gp')
   $overslaan = @($backupNaam, '$RECYCLE.BIN', 'System Volume Information')
-  $paden = New-Object System.Collections.Generic.List[string]
+  $gevonden = New-Object System.Collections.Generic.List[object]
   $tedoen = New-Object System.Collections.Generic.Stack[object]
   $tedoen.Push(@($map, ''))
   while ($tedoen.Count -gt 0) {
@@ -230,11 +232,58 @@ try {
       if ($e.PSIsContainer) {
         if ($overslaan -notcontains $e.Name) { $tedoen.Push(@($e.FullName, $rel)) }
       } elseif ($soorten -contains $e.Extension.TrimStart('.').ToLower()) {
-        $paden.Add($rel)
+        # Tijd = datum van het bestand (ms sinds 1970), voor als de foto zelf geen datum heeft
+        $tijd = ([DateTimeOffset]$e.LastWriteTimeUtc).ToUnixTimeMilliseconds()
+        $gevonden.Add([pscustomobject]@{ Rel = $rel; Vol = $e.FullName; Grootte = $e.Length; Tijd = $tijd })
       }
     }
   }
-  $paden = @($paden)
+
+  # Precies dezelfde bestanden maar een keer tonen. Alleen bestanden met dezelfde grootte
+  # worden vergeleken (snel). Voorkeur: naam zonder '(1)' of 'kopie', dan het kortste pad.
+  function IsKopie($f) { return [bool]($f.Rel -match '\(\d+\)|kopie|copy') }
+  function Beter($a, $b) {
+    if ((IsKopie $a) -ne (IsKopie $b)) { return -not (IsKopie $a) }
+    if ($a.Rel.Length -ne $b.Rel.Length) { return $a.Rel.Length -lt $b.Rel.Length }
+    return [string]::CompareOrdinal($a.Rel, $b.Rel) -lt 0
+  }
+  $sha = [Security.Cryptography.SHA256]::Create()
+  function Vingerafdruk($vol) {
+    $fs = [IO.File]::OpenRead($vol)
+    try { return [BitConverter]::ToString($sha.ComputeHash($fs)) } finally { $fs.Close() }
+  }
+  $perGrootte = @{}
+  foreach ($f in $gevonden) {
+    $k = [string]$f.Grootte
+    if (-not $perGrootte.ContainsKey($k)) { $perGrootte[$k] = New-Object System.Collections.Generic.List[object] }
+    $perGrootte[$k].Add($f)
+  }
+  $dubbel = 0
+  $weg = @{}
+  foreach ($k in @($perGrootte.Keys)) {
+    $groep = $perGrootte[$k]
+    if ($groep.Count -lt 2 -or $k -eq '0') { continue }
+    $perInhoud = @{}
+    foreach ($f in $groep) {
+      $h = $null
+      try { $h = Vingerafdruk $f.Vol } catch {
+        if ($env:DIA_GEEN_BROWSER) { [Console]::Error.WriteLine("VERGELIJKEN MISLUKT: $($f.Rel): $($_.Exception.Message)") }
+      }
+      if (-not $h) { continue }
+      if (-not $perInhoud.ContainsKey($h)) { $perInhoud[$h] = New-Object System.Collections.Generic.List[object] }
+      $perInhoud[$h].Add($f)
+    }
+    foreach ($zelfde in @($perInhoud.Values)) {
+      if ($zelfde.Count -lt 2) { continue }
+      $beste = $zelfde[0]
+      foreach ($f in $zelfde) { if (Beter $f $beste) { $beste = $f } }
+      foreach ($f in $zelfde) { if ($f.Rel -ne $beste.Rel) { $weg[$f.Rel] = $true; $dubbel++ } }
+    }
+  }
+  if ($env:DIA_GEEN_BROWSER) { [Console]::Error.WriteLine("DUBBELEN: $($gevonden.Count) bestanden, $($perGrootte.Count) groottes, $dubbel dubbel") }
+  $gevonden = @($gevonden | Where-Object { -not $weg.ContainsKey($_.Rel) })
+  $paden = @($gevonden | ForEach-Object { $_.Rel })
+  $tijden = @($gevonden | ForEach-Object { $_.Tijd })
 
   if ($paden.Count -eq 0) {
     Melding "Er staan geen foto's of filmpjes in deze map:`n$map`n`nZet Diavoorstelling.bat in de map met je foto's en dubbelklik er opnieuw op."
@@ -254,7 +303,9 @@ try {
   # Lijst voor de app: map als file:-adres plus de paden daarbinnen
   $json = ConvertTo-Json -InputObject $paden -Compress
   $basisUrl = ConvertTo-Json -InputObject ((FileUrl $map.TrimEnd('\')) + '/')
-  $lijst = "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n"
+  $lijst = "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n" +
+           "window.DIASHOW_TIMES = $(ConvertTo-Json -InputObject $tijden -Compress);`n" +
+           "window.DIASHOW_DUBBEL = $dubbel;`n"
   if ($listener) { $lijst += "window.DIASHOW_SERVER = '$hulpUrl';`nwindow.DIASHOW_TOKEN = '$token';`n" }
   [IO.File]::WriteAllText((Join-Path $app 'diashow-lijst.js'), $lijst, $utf8)
 

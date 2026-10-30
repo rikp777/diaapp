@@ -15,6 +15,7 @@ const APP_DIR = path.join(process.env.LOCALAPPDATA || '', 'Diavoorstelling');
 const OUDE_DATUM = new Date('2020-05-01T10:00:00Z');
 
 let photos, child, lijst;
+let uitvoer = ''; // wat het startbestand meldt (in testmodus)
 
 /** JPG maken met de browser zelf (op de Windows-runner is geen ffmpeg nodig). */
 async function makeJpeg(page, w, h, color) {
@@ -40,6 +41,10 @@ test.beforeAll(async ({ browser }) => {
   fs.mkdirSync(path.join(photos, 'sub map'));
   fs.writeFileSync(path.join(photos, 'sub map', 'strand.jpg'), plain);
   for (const f of ['tuin.jpg', path.join('sub map', 'strand.jpg')]) fs.utimesSync(path.join(photos, f), OUDE_DATUM, OUDE_DATUM);
+  // Een kopie (moet maar een keer getoond worden) en een iPhone Live Photo-filmpje
+  fs.copyFileSync(path.join(photos, 'tuin.jpg'), path.join(photos, 'tuin (1).jpg'));
+  fs.writeFileSync(path.join(photos, 'sub map', 'strand.mov'), Buffer.from('geen echt filmpje'));
+  fs.utimesSync(path.join(photos, 'sub map', 'strand.mov'), OUDE_DATUM, OUDE_DATUM);
 
   // Het echte downloadbestand bouwen en in de fotomap zetten
   execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'maak-download.js')]);
@@ -49,10 +54,17 @@ test.beforeAll(async ({ browser }) => {
   if (fs.existsSync(lijstPad)) fs.rmSync(lijstPad);
   // Dubbelklikken nabootsen: cmd voert het .bat-bestand uit; de test opent zelf Edge
   child = spawn('cmd.exe', ['/c', 'Diavoorstelling.bat'], {
-    cwd: photos, env: { ...process.env, DIA_GEEN_BROWSER: '1' }, stdio: 'ignore', windowsHide: true,
+    cwd: photos, env: { ...process.env, DIA_GEEN_BROWSER: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
-  await expect.poll(() => (fs.existsSync(lijstPad) ? fs.readFileSync(lijstPad, 'utf8') : ''), { timeout: 60_000 })
-    .toContain('DIASHOW_SERVER');
+  // Uitvoer van het startbestand bewaren (in testmodus komen meldingen hier i.p.v. in een venster)
+  child.stdout.on('data', (d) => { uitvoer += d; });
+  child.stderr.on('data', (d) => { uitvoer += d; });
+  try {
+    await expect.poll(() => (fs.existsSync(lijstPad) ? fs.readFileSync(lijstPad, 'utf8') : ''), { timeout: 60_000 })
+      .toContain('DIASHOW_SERVER');
+  } catch (err) {
+    throw new Error(`Diavoorstelling.bat schreef geen lijst. Uitvoer van het startbestand:\n${uitvoer || '(geen)'}\n\n${err.message}`);
+  }
   lijst = fs.readFileSync(lijstPad, 'utf8');
 });
 
@@ -86,11 +98,19 @@ async function openAt(page, name) {
 }
 
 test('the launcher scans the folder and writes the list with the helper', async () => {
+  console.log(`Uitvoer van Diavoorstelling.bat:\n${uitvoer}`);
   expect(lijst).toContain('"sub map/strand.jpg"');
   expect(lijst).toContain('"tuin.jpg"');
   expect(lijst).not.toContain('Diavoorstelling.bat');
+  expect(lijst).not.toContain('tuin (1).jpg'); // dubbele weggelaten
+  expect(lijst).toContain('DIASHOW_DUBBEL = 1;');
+  expect(lijst).toContain('"sub map/strand.mov"'); // Live Photo-filmpje: de app slaat het over
   expect(server()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   expect(token().length).toBeGreaterThanOrEqual(32);
+  // Bestandsdatums in dezelfde volgorde als de bestanden
+  const times = JSON.parse(/DIASHOW_TIMES = (\[[^\]]*\])/.exec(lijst)[1]);
+  expect(times.length).toBe(3);
+  for (const t of times) expect(Math.abs(t - OUDE_DATUM.getTime())).toBeLessThan(2000);
 });
 
 test('the helper refuses wrong tokens, paths outside the folder and non-JPG files', async () => {
@@ -106,6 +126,10 @@ test('the helper refuses wrong tokens, paths outside the folder and non-JPG file
 test('Edge saves a caption into the photo via the real helper; backup and date are kept', async ({ page }) => {
   const original = file('tuin.jpg');
   await openAt(page, 'tuin.jpg');
+  // Kopie en Live Photo-filmpje komen niet voorbij
+  expect((await page.evaluate(() => /** @type {any} */ (window).diashow.state.order.length))).toBe(2);
+  await expect(page.locator('#count')).toContainText('1 dubbele overgeslagen');
+  await expect(page.locator('#count')).toContainText('1 Live Photo-filmpje overgeslagen');
   await page.keyboard.press('t');
   await page.keyboard.type('Zo nog even de tuin grasmaaien – één keer');
   await page.keyboard.press('Enter');
@@ -126,6 +150,7 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   await openAt(page, 'tuin.jpg');
   await expect(page.locator('#caption')).toHaveText('Zo nog even de tuin grasmaaien – één keer');
   await expect(page.locator('#place')).toHaveText('Utrecht');
+  await expect(page.locator('#date')).toHaveText('1 juli 2024'); // opnamedatum uit de foto
 
   // Plek zelf aanpassen
   await page.keyboard.press('p');
@@ -139,6 +164,7 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
 test('Edge rotates a photo in a subfolder via the real helper', async ({ page }) => {
   const original = file(path.join('sub map', 'strand.jpg'));
   await openAt(page, 'sub map/strand.jpg');
+  await expect(page.locator('#date')).toHaveText('1 mei 2020'); // geen EXIF: datum van het bestand
   await page.keyboard.press('r');
   await expect(page.locator('#toast')).toHaveText('Foto gedraaid', { timeout: 15_000 });
   expect(readMeta(file(path.join('sub map', 'strand.jpg'))).orientation).toBe(6);
