@@ -99,7 +99,9 @@
     width: 100%; height: 100%;
     object-fit: contain;
   }
-  .fill .slide img, .fill .slide video { object-fit: cover; }
+  /* Scherm vullen: alleen bijsnijden als het beeld dezelfde stand heeft als het scherm,
+     zodat staande foto's en filmpjes op een liggend scherm altijd helemaal te zien zijn */
+  .fill .slide img.same-orient, .fill .slide video.same-orient { object-fit: cover; }
 
   /* Ken Burns: langzaam inzoomen en schuiven, duur = tijd per foto */
   @keyframes kenburns {
@@ -245,7 +247,7 @@
       </div>
       <div class="setting">
         <label for="fill">Scherm vullen
-          <small>Geen zwarte randen; foto's worden bijgesneden (ook met <kbd>V</kbd> of de knop in de balk)</small>
+          <small>Geen zwarte randen: beelden worden bijgesneden. Staande foto's en filmpjes blijven helemaal zichtbaar. Ook met <kbd>V</kbd> of de knop in de balk.</small>
         </label>
         <input type="checkbox" id="fill">
       </div>
@@ -701,6 +703,17 @@
     img.classList.add('kb');
   }
 
+  // Staat het beeld net als het scherm (beide liggend of beide staand)?
+  function markOrientation(el) {
+    const w = el.naturalWidth || el.videoWidth;
+    const h = el.naturalHeight || el.videoHeight;
+    const same = !w || !h || (w >= h) === (window.innerWidth >= window.innerHeight);
+    el.classList.toggle('same-orient', same);
+  }
+  window.addEventListener('resize', () => {
+    for (const el of show.querySelectorAll('.slide img, .slide video')) markOrientation(el);
+  });
+
   // Laadt een dia; geeft het element terug, of null als het niet te tonen is
   async function loadElement(m, idx) {
     if (m.type === 'image') {
@@ -822,6 +835,7 @@
     const back = 1 - front;
     clearLayer(back);
     if (m.type === 'image' && kenBurnsOn()) applyKenBurns(el);
+    markOrientation(el);
     slides[back].appendChild(el);
     layerIdx[back] = idx;
     // Kruislings vervagen tussen de twee lagen

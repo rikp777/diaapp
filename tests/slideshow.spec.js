@@ -778,3 +778,31 @@ test.describe('scherm vullen', () => {
     await expect(page.locator('#fill')).toBeChecked();
   });
 });
+
+test.describe('scherm vullen en staande beelden', () => {
+  test('fill crops landscape photos on a landscape screen, but shows portrait photos and videos fully', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openApp(page);
+    await page.check('#fill');
+    await page.selectOption('#videoMode', 'interval');
+    await setStartSeconds(page, 30);
+    await page.setInputFiles('#fileInput', media('foto1.png', 'foto2.png', 'staand.webm'));
+    await page.click('#startBtn');
+    await ensureNotFullscreen(page);
+    const fitOf = () => page.evaluate(() => {
+      const el = document.querySelector('.slide.visible img, .slide.visible video');
+      return el ? getComputedStyle(el).objectFit : null;
+    });
+    await page.keyboard.press('Home');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect.poll(fitOf).toBe('cover'); // liggend op liggend scherm: vullen
+    await next(page, 'foto2.png');
+    await expect.poll(fitOf).toBe('contain'); // staande foto: helemaal tonen
+    await next(page, 'staand.webm');
+    await expect.poll(fitOf).toBe('contain'); // staand filmpje: helemaal tonen
+
+    // Op een staand scherm (telefoon) wordt een staand filmpje wel gevuld
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(fitOf).toBe('cover');
+  });
+});

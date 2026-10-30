@@ -33,6 +33,10 @@ module.exports = async () => {
       '-t', '2', '-c:v', 'libvpx', '-b:v', '200k', video]);
   }
 
+  // Portrait (staand) video, like a phone video, for the fill test.
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=240x320:rate=25',
+    '-t', '2', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'staand.webm')]);
+
   // Unsupported files.
   fs.writeFileSync(path.join(dir, 'kapot.heic'), crypto.randomBytes(4096));
   fs.writeFileSync(path.join(dir, 'notitie.txt'), 'Dit is geen foto.\n');
