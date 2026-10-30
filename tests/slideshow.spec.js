@@ -834,3 +834,91 @@ test.describe('beeld past altijd binnen het scherm', () => {
     });
   }
 });
+
+test.describe('tekst bij een foto', () => {
+  test('T opens the editor, Enter saves, the text shows on that photo only and is remembered', async ({ page }) => {
+    await startShow(page, BASIC);
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await page.keyboard.press('t');
+    await expect(page.locator('#captionEdit')).toBeVisible();
+    await expect(page.locator('#captionInput')).toBeFocused();
+    expect((await state(page)).playing).toBe(false); // pauzeert tijdens typen
+
+    // Typen mag geen sneltoetsen activeren (g = overzicht, spatie = pauze, f = volledig scherm)
+    await page.keyboard.type('zo nog even de tuin grasmaaien');
+    await expect(page.locator('#grid')).toBeHidden();
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#captionEdit')).toBeHidden();
+    await expect(page.locator('#caption')).toHaveText('zo nog even de tuin grasmaaien');
+    await expect(page.locator('#caption')).toBeVisible();
+    expect((await state(page)).playing).toBe(true); // speelt weer verder
+
+    await next(page, 'foto2.png');
+    await expect(page.locator('#caption')).toHaveText('');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect(page.locator('#caption')).toHaveText('zo nog even de tuin grasmaaien');
+
+    // Na herladen en opnieuw dezelfde bestanden kiezen staat de tekst er nog
+    await page.reload();
+    await page.setInputFiles('#fileInput', media(...BASIC));
+    await page.click('#startBtn');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect(page.locator('#caption')).toHaveText('zo nog even de tuin grasmaaien');
+  });
+
+  test('Esc cancels without stopping the show; an empty text removes it; the setting hides texts', async ({ page }) => {
+    await startShow(page, BASIC);
+    await page.keyboard.press('t');
+    await page.keyboard.type('eerste versie');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#captionEdit')).toBeHidden();
+    await expect(page.locator('#show')).toHaveClass(/\bactive\b/); // niet gestopt
+    await expect(page.locator('#caption')).toHaveText('');
+
+    await page.mouse.move(640, 300);
+    await page.click('#captionBtn');
+    await page.fill('#captionInput', 'blijft staan');
+    await page.click('#captionEdit button[type=submit]');
+    await expect(page.locator('#caption')).toHaveText('blijft staan');
+
+    await page.keyboard.press('t');
+    await page.fill('#captionInput', '   ');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#caption')).toHaveText('');
+    expect(await page.evaluate(() => localStorage.getItem('diashow-teksten'))).toBe('{}');
+
+    // Teksten uitzetten op het instellingenscherm verbergt ze
+    await page.keyboard.press('t');
+    await page.fill('#captionInput', 'verborgen');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.uncheck('#captions');
+    await page.click('#startBtn');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect(page.locator('#caption')).toBeHidden();
+  });
+
+  test('caption stays above the control bar and within the screen at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await startShow(page, BASIC);
+    await page.keyboard.press('t');
+    await page.keyboard.type('Een hele lange tekst die op een smal scherm over meerdere regels moet lopen zonder eraf te vallen');
+    await page.keyboard.press('Enter');
+    await page.mouse.move(200, 300);
+    await expect(page.locator('#show')).toHaveClass(/\bui\b/);
+    await expect.poll(async () => {
+      const c = await page.locator('#caption').boundingBox();
+      const b = await page.locator('#bar').boundingBox();
+      // tekst (zonder de onderste opvulling) eindigt boven de balk
+      const textBottom = await page.evaluate(() => {
+        const el = document.getElementById('caption');
+        const r = document.createRange(); r.selectNodeContents(el);
+        return r.getBoundingClientRect().bottom;
+      });
+      return c.x >= 0 && c.x + c.width <= 390 && textBottom <= b.y;
+    }).toBe(true);
+  });
+});

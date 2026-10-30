@@ -25,7 +25,7 @@
     overflow: hidden;
     user-select: none;
   }
-  button, input, select { font: inherit; color: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
 
   /* ---------- Startscherm ---------- */
   #start {
@@ -147,6 +147,35 @@
   #show.ui #info { opacity: 1; }
   #name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* Tekst bij een foto: onderaan, groot en leesbaar; schuift omhoog als de balk zichtbaar is */
+  #caption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 48px 24px 28px;
+    text-align: center; pointer-events: none;
+    font-size: clamp(20px, 3vw, 42px); line-height: 1.3; font-weight: 600;
+    color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, .9);
+    background: linear-gradient(to top, rgba(0, 0, 0, .65), rgba(0, 0, 0, 0));
+    white-space: pre-line; overflow-wrap: anywhere;
+    transition: padding-bottom .25s;
+  }
+  #caption:empty, #caption.off { display: none; }
+  #show.ui #caption { padding-bottom: calc(var(--bar-h, 64px) + 40px); }
+
+  #captionEdit {
+    position: absolute; left: 50%; bottom: calc(var(--bar-h, 64px) + 40px); transform: translateX(-50%);
+    width: min(640px, calc(100% - 32px));
+    background: var(--panel-solid); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+  }
+  #captionEdit[hidden] { display: none; }
+  #captionEdit label { display: block; font-weight: 600; margin-bottom: 8px; }
+  #captionEdit small { display: block; color: var(--muted); margin-top: 6px; }
+  #captionInput {
+    width: 100%; resize: vertical; min-height: 64px; font-size: 20px;
+    padding: 10px; background: #09090b; border: 1px solid var(--border); border-radius: 8px;
+  }
+  #captionEdit .pick-row { justify-content: flex-end; margin-top: 12px; }
+
   #progress {
     position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
     background: var(--accent); opacity: .8;
@@ -258,6 +287,12 @@
         </label>
         <input type="checkbox" id="kenburns">
       </div>
+      <div class="setting">
+        <label for="captions">Teksten bij foto's tonen
+          <small>Een tekst zet je tijdens de voorstelling met <kbd>T</kbd> of het potloodje in de balk</small>
+        </label>
+        <input type="checkbox" id="captions">
+      </div>
     </div>
 
     <div class="pick-row">
@@ -267,7 +302,7 @@
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>T</kbd> tekst &nbsp; <kbd>G</kbd> overzicht &nbsp;
       <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> instellingen
     </div>
   </div>
@@ -278,8 +313,19 @@
   <div class="slide" id="slideA"></div>
   <div class="slide" id="slideB"></div>
 
+  <div id="caption" aria-live="polite"></div>
   <div id="info"><span id="name"></span></div>
   <div id="toast" role="status" aria-live="polite"></div>
+
+  <form id="captionEdit" hidden>
+    <label for="captionInput">Tekst bij deze foto</label>
+    <textarea id="captionInput" rows="2" maxlength="300" placeholder="Bijvoorbeeld: zo nog even de tuin grasmaaien"></textarea>
+    <small>Enter = opslaan &nbsp;·&nbsp; Esc = annuleren &nbsp;·&nbsp; leeg laten = tekst weghalen</small>
+    <div class="pick-row">
+      <button type="button" class="btn" id="captionCancel">Annuleren</button>
+      <button type="submit" class="btn primary">Opslaan</button>
+    </div>
+  </form>
   <div id="progress"></div>
 
   <div id="bar">
@@ -299,6 +345,9 @@
     <div class="sep"></div>
     <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    </button>
+    <button class="icon" id="captionBtn" type="button" title="Tekst bij deze foto (T)" aria-label="Tekst bij deze foto">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
     </button>
     <button class="icon" id="fillBtn" type="button" title="Scherm vullen (V)" aria-label="Scherm vullen" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2zM7 7h10v10H7z"/></svg>
@@ -359,7 +408,7 @@
   const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, volume: 1 };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, volume: 1 };
   const settings = { ...defaults };
   const clampSeconds = (v) => {
     const n = v === '' || v === null ? NaN : Math.round(Number(v));
@@ -379,7 +428,7 @@
   if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns'];
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions'];
   function syncStartControls() {
     $('seconds').value = settings.seconds;
     $('videoMode').value = settings.videoMode;
@@ -675,6 +724,8 @@
   }
 
   function stop() {
+    $('captionEdit').hidden = true;
+    $('caption').textContent = '';
     clearTimer();
     token++;
     clearTimeout(clickTimer);
@@ -852,6 +903,7 @@
     currentVideo = m.type === 'video' ? el : null;
     $('name').textContent = nameOf(m);
     $('pos').textContent = `${pos + 1} / ${order.length}`;
+    showCaption();
 
     if (currentVideo) {
       const v = currentVideo;
@@ -1029,6 +1081,57 @@
     preload();
     pruneUrls();
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
+  }
+
+  // ---------- Teksten bij foto's (onthouden in de browser) ----------
+  const CAPTIONS_KEY = 'diashow-teksten';
+  let captions = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(CAPTIONS_KEY) || '{}');
+    if (raw && typeof raw === 'object') {
+      for (const [k, v] of Object.entries(raw)) if (typeof v === 'string' && v) captions[k] = v;
+    }
+  } catch {}
+  const saveCaptions = () => { try { localStorage.setItem(CAPTIONS_KEY, JSON.stringify(captions)); } catch {} };
+  // Sleutel per bestand: vaste plek op schijf (Windows-starter) of pad + grootte (zelf gekozen)
+  const captionKey = (m) => (m.file ? `${m.path}|${m.file.size}` : m.src || m.path);
+  const currentMedia = () => (order.length ? media[order[pos]] : null);
+
+  function showCaption() {
+    const m = currentMedia();
+    const c = $('caption');
+    c.textContent = m ? captions[captionKey(m)] || '' : '';
+    c.classList.toggle('off', !settings.captions);
+  }
+
+  let captionWasPlaying = false;
+  const captionEditing = () => !$('captionEdit').hidden;
+  function openCaptionEditor() {
+    const m = currentMedia();
+    if (!m || captionEditing()) return;
+    captionWasPlaying = playing;
+    if (playing) pausePlayback();
+    pokeUI();
+    $('captionEdit').hidden = false;
+    const input = $('captionInput');
+    input.value = captions[captionKey(m)] || '';
+    input.focus();
+    input.select();
+  }
+  function closeCaptionEditor(saveIt) {
+    if (!captionEditing()) return;
+    const m = currentMedia();
+    if (saveIt && m) {
+      const text = $('captionInput').value.trim();
+      if (text) captions[captionKey(m)] = text; else delete captions[captionKey(m)];
+      saveCaptions();
+      if (text && !settings.captions) { settings.captions = true; save(); }
+      toast(text ? 'Tekst opgeslagen' : 'Tekst weggehaald');
+    }
+    $('captionEdit').hidden = true;
+    showCaption();
+    show.focus({ preventScroll: true });
+    if (captionWasPlaying) resumePlayback();
   }
 
   function toggleFill() {
@@ -1235,10 +1338,11 @@
   // Bedieningsbalk tonen bij muisbeweging, daarna weer verbergen
   let uiTimer;
   function pokeUI() {
+    show.style.setProperty('--bar-h', `${bar.offsetHeight || 64}px`);
     show.classList.add('ui');
     clearTimeout(uiTimer);
     uiTimer = setTimeout(() => {
-      const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible');
+      const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible') || captionEditing();
       if (keepOpen) pokeUI(); else show.classList.remove('ui');
     }, 2500);
   }
@@ -1249,7 +1353,7 @@
   // Enkele klik pas na korte tijd uitvoeren, zodat een dubbelklik alleen volledig scherm wisselt
   let clickTimer = null;
   show.addEventListener('click', (e) => {
-    if (!e.target.isConnected || e.target.closest('#bar, #grid')) return;
+    if (!e.target.isConnected || e.target.closest('#bar, #grid, #captionEdit')) return;
     pokeUI();
     clearTimeout(clickTimer);
     clickTimer = null;
@@ -1265,7 +1369,7 @@
     }, 250);
   });
   show.addEventListener('dblclick', (e) => {
-    if (e.target.closest('#bar, #grid')) return;
+    if (e.target.closest('#bar, #grid, #captionEdit')) return;
     if (performance.now() - gridClosedAt < 500) return; // tweede klik van een dubbelklik op een miniatuur
     clearTimeout(clickTimer);
     clickTimer = null;
@@ -1282,6 +1386,19 @@
   $('muteBtn').onclick = toggleMute;
   $('shuffleBtn').onclick = toggleShuffle;
   $('kbBtn').onclick = toggleKenBurns;
+  $('captionBtn').onclick = openCaptionEditor;
+  $('captionCancel').onclick = () => closeCaptionEditor(false);
+  $('captionEdit').addEventListener('submit', (e) => { e.preventDefault(); closeCaptionEditor(true); });
+  $('captionInput').addEventListener('keydown', (e) => {
+    // Typen in het tekstvak mag geen sneltoetsen van de voorstelling activeren
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); closeCaptionEditor(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+  });
+  $('captionEdit').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closeCaptionEditor(false); }
+  });
   $('fillBtn').onclick = toggleFill;
   $('gridBtn').onclick = openGrid;
   $('fsBtn').onclick = toggleFullscreen;
@@ -1325,6 +1442,7 @@
       case 's': case 'S': toggleShuffle(); break;
       case 'a': case 'A': toggleKenBurns(); break;
       case 'v': case 'V': toggleFill(); break;
+      case 't': case 'T': e.preventDefault(); openCaptionEditor(); break;
       case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;

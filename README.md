@@ -54,6 +54,16 @@ Bestanden worden op naam gesorteerd, met getallen in de goede volgorde
 | Scherm vullen | Snijdt foto's en filmpjes bij zodat er geen zwarte randen zijn. Staande beelden op een liggend scherm (en andersom) worden niet bijgesneden, zodat je ze helemaal ziet. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
 | Bewegende foto's | Foto's langzaam inzoomen en verschuiven (standaard uit). Ook tijdens de voorstelling aan/uit met `A` of de knop met het vergrootglas. |
 
+### Tekst bij een foto
+
+Druk tijdens de voorstelling op `T` (of klik op het potloodje in de balk), typ
+een tekst, bijvoorbeeld *"zo nog even de tuin grasmaaien"*, en druk op
+`Enter`. De tekst staat daarna onderaan in beeld, elke keer als die foto
+langskomt. De voorstelling pauzeert zolang je typt. Tekst leegmaken en
+`Enter` haalt hem weg. Met **Teksten bij foto's tonen** op het
+instellingenscherm zet je alle teksten aan of uit. Teksten worden op deze
+computer onthouden.
+
 Instellingen worden onthouden in de browser (`localStorage`).
 
 ## Bediening
@@ -70,6 +80,7 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `S` | Willekeurige volgorde aan/uit |
 | `A` | Bewegende foto's aan/uit |
 | `V` | Scherm vullen aan/uit |
+| `T` | Tekst bij de huidige foto zetten of aanpassen |
 | `G` | Miniatuuroverzicht openen/sluiten |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
 
