@@ -778,3 +778,59 @@ test.describe('scherm vullen', () => {
     await expect(page.locator('#fill')).toBeChecked();
   });
 });
+
+test.describe('scherm vullen en staande beelden', () => {
+  test('fill crops landscape photos on a landscape screen, but shows portrait photos and videos fully', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openApp(page);
+    await page.check('#fill');
+    await page.selectOption('#videoMode', 'interval');
+    await setStartSeconds(page, 30);
+    await page.setInputFiles('#fileInput', media('foto1.png', 'foto2.png', 'staand.webm'));
+    await page.click('#startBtn');
+    await ensureNotFullscreen(page);
+    const fitOf = () => page.evaluate(() => {
+      const el = document.querySelector('.slide.visible img, .slide.visible video');
+      return el ? getComputedStyle(el).objectFit : null;
+    });
+    await page.keyboard.press('Home');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect.poll(fitOf).toBe('cover'); // liggend op liggend scherm: vullen
+    await next(page, 'foto2.png');
+    await expect.poll(fitOf).toBe('contain'); // staande foto: helemaal tonen
+    await next(page, 'staand.webm');
+    await expect.poll(fitOf).toBe('contain'); // staand filmpje: helemaal tonen
+
+    // Op een staand scherm (telefoon) wordt een staand filmpje wel gevuld
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(fitOf).toBe('cover');
+  });
+});
+
+test.describe('beeld past altijd binnen het scherm', () => {
+  for (const [w, h] of [[1280, 720], [390, 844]]) {
+    test(`portrait/landscape photos and videos stay within ${w}x${h} (fill off)`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await openApp(page);
+      await page.selectOption('#videoMode', 'interval');
+      await setStartSeconds(page, 30);
+      await page.setInputFiles('#fileInput', media('foto1.png', 'foto2.png', 'foto10.png', 'staand.webm', 'video.webm'));
+      await page.click('#startBtn');
+      await ensureNotFullscreen(page);
+      await page.keyboard.press('Home');
+      for (const name of ['foto1.png', 'foto2.png', 'foto10.png', 'staand.webm', 'video.webm']) {
+        await expect(page.locator('#name')).toHaveText(name);
+        const box = await page.evaluate(() => {
+          const el = document.querySelector('.slide.visible img, .slide.visible video');
+          const r = el.getBoundingClientRect();
+          return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+        });
+        expect(box.top, name).toBeGreaterThanOrEqual(-1);
+        expect(box.left, name).toBeGreaterThanOrEqual(-1);
+        expect(box.bottom, name).toBeLessThanOrEqual(h + 1);
+        expect(box.right, name).toBeLessThanOrEqual(w + 1);
+        await page.keyboard.press('ArrowRight');
+      }
+    });
+  }
+});

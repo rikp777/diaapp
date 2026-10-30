@@ -51,7 +51,7 @@ Bestanden worden op naam gesorteerd, met getallen in de goede volgorde
 | Geluid van filmpjes uit | Filmpjes zonder geluid afspelen. |
 | Willekeurige volgorde | Husselt de volgorde. |
 | Herhalen na laatste | Begint na de laatste dia weer opnieuw. |
-| Scherm vullen | Snijdt foto's bij zodat er geen zwarte randen zijn. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
+| Scherm vullen | Snijdt foto's en filmpjes bij zodat er geen zwarte randen zijn. Staande beelden op een liggend scherm (en andersom) worden niet bijgesneden, zodat je ze helemaal ziet. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
 | Bewegende foto's | Foto's langzaam inzoomen en verschuiven (standaard uit). Ook tijdens de voorstelling aan/uit met `A` of de knop met het vergrootglas. |
 
 Instellingen worden onthouden in de browser (`localStorage`).
