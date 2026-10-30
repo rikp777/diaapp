@@ -322,6 +322,12 @@
         <input type="checkbox" id="showPlace">
       </div>
       <div class="setting">
+        <label for="skipLive">Live Photo-filmpjes overslaan
+          <small>iPhones bewaren bij een foto vaak ook een kort filmpje met dezelfde naam (IMG_1234.JPG + IMG_1234.MOV). Dat filmpje wordt dan niet getoond.</small>
+        </label>
+        <input type="checkbox" id="skipLive">
+      </div>
+      <div class="setting">
         <label for="showDate">Datum tonen
           <small>Wanneer de foto gemaakt is (uit de foto zelf; anders de datum van het bestand)</small>
         </label>
@@ -460,7 +466,7 @@
   const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showDate: true, showName: false, volume: 1 };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showDate: true, showName: false, skipLive: true, volume: 1 };
   const settings = { ...defaults };
   const clampSeconds = (v) => {
     const n = v === '' || v === null ? NaN : Math.round(Number(v));
@@ -480,7 +486,7 @@
   if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showDate', 'showName'];
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showDate', 'showName', 'skipLive'];
   function syncStartControls() {
     $('seconds').value = settings.seconds;
     $('videoMode').value = settings.videoMode;
@@ -492,7 +498,7 @@
   $('seconds').addEventListener('change', (e) => { settings.seconds = clampSeconds(e.target.value); e.target.value = settings.seconds; save(); });
   $('videoMode').addEventListener('change', (e) => { settings.videoMode = e.target.value === 'interval' ? 'interval' : 'full'; save(); });
   for (const k of CHECKS) {
-    $(k).addEventListener('change', (e) => { settings[k] = e.target.checked; save(); });
+    $(k).addEventListener('change', (e) => { settings[k] = e.target.checked; save(); if (k === 'skipLive') updateCount(); });
   }
 
 
@@ -501,6 +507,49 @@
   let media = [];
   let source = 'bestanden'; // 'lijst' = diashow-lijst.js van de Windows-starter, 'bestanden' = zelf gekozen
   let loadSkipped = 0;
+  let dupSkipped = 0; // precies dezelfde bestanden die maar één keer getoond worden
+
+  // Live Photo: een filmpje met dezelfde naam als een foto in dezelfde map (IMG_1234.JPG + IMG_1234.MOV)
+  const stem = (p) => p.replace(/\.[^./]+$/, '').toLowerCase();
+  function markLive(list) {
+    const photos = new Set(list.filter((m) => m.type === 'image').map((m) => stem(m.path)));
+    for (const m of list) m.live = m.type === 'video' && photos.has(stem(m.path));
+  }
+  const isHidden = (m) => m.bad || (settings.skipLive && m.live);
+
+  // Precies dezelfde bestanden (zelfde inhoud) maar één keer tonen. Alleen bestanden met
+  // dezelfde grootte worden vergeleken. Voorkeur: de naam zonder '(1)' of 'kopie', dan het kortste pad.
+  const COPY_NAME = /\(\d+\)|kopie|copy/i;
+  async function removeDuplicates(list) {
+    const bySize = new Map();
+    for (const m of list) {
+      const k = m.file.size;
+      if (!bySize.has(k)) bySize.set(k, []);
+      bySize.get(k).push(m);
+    }
+    const drop = new Set();
+    const hash = async (f) => {
+      const buf = await f.arrayBuffer();
+      if (crypto.subtle) return [...new Uint8Array(await crypto.subtle.digest('SHA-256', buf))].join(',');
+      return `${f.size}|${f.name}`;
+    };
+    for (const group of bySize.values()) {
+      if (group.length < 2 || group[0].file.size === 0) continue;
+      const byHash = new Map();
+      for (const m of group) {
+        let h;
+        try { h = await hash(m.file); } catch { continue; }
+        if (!byHash.has(h)) byHash.set(h, []);
+        byHash.get(h).push(m);
+      }
+      for (const same of byHash.values()) {
+        if (same.length < 2) continue;
+        same.sort((a, b) => (COPY_NAME.test(a.path) - COPY_NAME.test(b.path)) || a.path.length - b.path.length || collator.compare(a.path, b.path));
+        for (const m of same.slice(1)) drop.add(m);
+      }
+    }
+    return { kept: list.filter((m) => !drop.has(m)), removed: drop.size };
+  }
   let loadGen = 0;
 
   const kindOf = (file) => {
@@ -570,15 +619,18 @@
   }
 
   function updateCount() {
-    const usable = media.filter((m) => !m.bad);
+    const usable = media.filter((m) => !isHidden(m));
     const photos = usable.filter((m) => m.type === 'image').length;
     const videos = usable.length - photos;
-    const skipped = loadSkipped + (media.length - usable.length);
+    const skipped = loadSkipped + media.filter((m) => m.bad).length;
+    const live = settings.skipLive ? media.filter((m) => m.live && !m.bad).length : 0;
     let text = usable.length
       ? `${photos} foto${photos === 1 ? '' : "'s"} en ${videos} filmpje${videos === 1 ? '' : 's'} ${source === 'lijst' ? 'uit deze map' : 'geselecteerd'}`
       : 'Geen foto\'s of filmpjes gevonden';
+    if (dupSkipped) text += ` · ${dupSkipped} dubbele overgeslagen`;
+    if (live) text += ` · ${live} Live Photo-filmpje${live === 1 ? '' : 's'} overgeslagen`;
     if (skipped) text += ` · ${skipped} bestand${skipped === 1 ? '' : 'en'} overgeslagen (niet ondersteund)`;
-    else if (!usable.length) text += '.';
+    else if (!usable.length && !dupSkipped && !live) text += '.';
     $('count').textContent = text;
     $('startBtn').disabled = !usable.length;
     $('browseBtn').disabled = !usable.length;
@@ -597,7 +649,11 @@
     const ok = await filterSupported(list, gen);
     if (gen !== loadGen) return;
     loadSkipped = list.length - ok.length;
-    media = ok.sort((a, b) => collator.compare(a.path, b.path));
+    const { kept, removed } = await removeDuplicates(ok);
+    if (gen !== loadGen) return;
+    dupSkipped = removed;
+    markLive(kept);
+    media = kept.sort((a, b) => collator.compare(a.path, b.path));
     updateCount();
   }
 
@@ -641,9 +697,11 @@
       return !t || probeVideoEl.canPlayType(t) !== '';
     });
     loadSkipped = list.length - ok.length + unknown;
+    dupSkipped = Number.isFinite(window.DIASHOW_DUBBEL) ? window.DIASHOW_DUBBEL : 0;
+    markLive(ok);
     media = ok.sort((a, b) => collator.compare(a.path, b.path));
     updateCount();
-    return media.length > 0;
+    return media.some((m) => !isHidden(m));
   }
 
   $('pickFiles').onclick = () => $('fileInput').click();
@@ -754,7 +812,7 @@
   }
   function buildOrder(keepCurrent) {
     const current = order[pos];
-    order = media.map((_, i) => i).filter((i) => !media[i].bad);
+    order = media.map((_, i) => i).filter((i) => !isHidden(media[i]));
     if (settings.shuffle) shuffleArray(order);
     pos = 0;
     if (keepCurrent && current !== undefined) {

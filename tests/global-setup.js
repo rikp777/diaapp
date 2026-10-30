@@ -56,7 +56,10 @@ module.exports = async () => {
   fs.mkdirSync(many);
   const small = path.join(dir, 'small.png');
   png(small, '64x48', 'orange');
-  for (let i = 1; i <= 60; i++) fs.copyFileSync(small, path.join(many, `p${i}.png`));
+  // Elk plaatje net anders (extra bytes na het einde van de PNG; browsers negeren die),
+  // anders zijn het exacte kopieen en toont de app er terecht maar een van.
+  const smallBytes = fs.readFileSync(small);
+  for (let i = 1; i <= 60; i++) fs.writeFileSync(path.join(many, `p${i}.png`), Buffer.concat([smallBytes, Buffer.from(`#${i}`)]));
 
   process.env.DIASHOW_MEDIA = dir;
   return async () => { fs.rmSync(dir, { recursive: true, force: true }); };

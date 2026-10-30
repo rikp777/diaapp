@@ -218,8 +218,7 @@ try {
   $soorten = @('jpg','jpeg','jfif','png','apng','gif','webp','bmp','avif','svg','ico','heic','heif','tif','tiff',
                'mp4','m4v','webm','mov','mkv','ogv','avi','3gp')
   $overslaan = @($backupNaam, '$RECYCLE.BIN', 'System Volume Information')
-  $paden = New-Object System.Collections.Generic.List[string]
-  $tijden = New-Object System.Collections.Generic.List[long]
+  $gevonden = New-Object System.Collections.Generic.List[object]
   $tedoen = New-Object System.Collections.Generic.Stack[object]
   $tedoen.Push(@($map, ''))
   while ($tedoen.Count -gt 0) {
@@ -231,14 +230,33 @@ try {
       if ($e.PSIsContainer) {
         if ($overslaan -notcontains $e.Name) { $tedoen.Push(@($e.FullName, $rel)) }
       } elseif ($soorten -contains $e.Extension.TrimStart('.').ToLower()) {
-        $paden.Add($rel)
-        # Datum van het bestand (ms sinds 1970), voor als de foto zelf geen datum heeft
-        $tijden.Add(([DateTimeOffset]$e.LastWriteTimeUtc).ToUnixTimeMilliseconds())
+        $gevonden.Add([pscustomobject]@{
+          Rel = $rel; Vol = $e.FullName; Grootte = $e.Length
+          # Datum van het bestand (ms sinds 1970), voor als de foto zelf geen datum heeft
+          Tijd = ([DateTimeOffset]$e.LastWriteTimeUtc).ToUnixTimeMilliseconds()
+        })
       }
     }
   }
-  $paden = @($paden)
-  $tijden = @($tijden)
+
+  # Precies dezelfde bestanden maar een keer tonen. Alleen bestanden met dezelfde grootte
+  # worden vergeleken (snel). Voorkeur: naam zonder '(1)' of 'kopie', dan het kortste pad.
+  $dubbel = 0
+  $weg = New-Object 'System.Collections.Generic.HashSet[string]'
+  foreach ($groep in @($gevonden | Group-Object Grootte | Where-Object { $_.Count -gt 1 -and $_.Name -ne '0' })) {
+    $perInhoud = $groep.Group | Group-Object {
+      $h = Get-FileHash -LiteralPath $_.Vol -Algorithm SHA256 -ErrorAction SilentlyContinue
+      if ($h) { $h.Hash } else { 'onleesbaar:' + $_.Rel }
+    }
+    foreach ($zelfde in @($perInhoud | Where-Object { $_.Count -gt 1 })) {
+      $volgorde = @($zelfde.Group | Sort-Object @{ Expression = { if ($_.Rel -match '\(\d+\)|kopie|copy') { 1 } else { 0 } } },
+                                               @{ Expression = { $_.Rel.Length } }, Rel)
+      foreach ($x in $volgorde[1..($volgorde.Count - 1)]) { [void]$weg.Add($x.Rel); $dubbel++ }
+    }
+  }
+  $gevonden = @($gevonden | Where-Object { -not $weg.Contains($_.Rel) })
+  $paden = @($gevonden | ForEach-Object { $_.Rel })
+  $tijden = @($gevonden | ForEach-Object { $_.Tijd })
 
   if ($paden.Count -eq 0) {
     Melding "Er staan geen foto's of filmpjes in deze map:`n$map`n`nZet Diavoorstelling.bat in de map met je foto's en dubbelklik er opnieuw op."
@@ -259,7 +277,8 @@ try {
   $json = ConvertTo-Json -InputObject $paden -Compress
   $basisUrl = ConvertTo-Json -InputObject ((FileUrl $map.TrimEnd('\')) + '/')
   $lijst = "window.DIASHOW_BASE = $basisUrl;`nwindow.DIASHOW_FILES = $json;`n" +
-           "window.DIASHOW_TIMES = $(ConvertTo-Json -InputObject $tijden -Compress);`n"
+           "window.DIASHOW_TIMES = $(ConvertTo-Json -InputObject $tijden -Compress);`n" +
+           "window.DIASHOW_DUBBEL = $dubbel;`n"
   if ($listener) { $lijst += "window.DIASHOW_SERVER = '$hulpUrl';`nwindow.DIASHOW_TOKEN = '$token';`n" }
   [IO.File]::WriteAllText((Join-Path $app 'diashow-lijst.js'), $lijst, $utf8)
 

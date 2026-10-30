@@ -714,3 +714,61 @@ test.describe('datum', () => {
     expect(none).toBe('');
   });
 });
+
+test.describe('dubbele foto\'s en Live Photos', () => {
+  test('files picked by hand: an exact copy is shown once, a Live Photo video is skipped (switchable)', async ({ page }) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diashow-dubbel-'));
+    try {
+      fs.copyFileSync(path.join(MEDIA(), 'canon.jpg'), path.join(dir, 'tuin.jpg'));
+      fs.copyFileSync(path.join(MEDIA(), 'canon.jpg'), path.join(dir, 'tuin (1).jpg')); // kopie
+      fs.copyFileSync(path.join(MEDIA(), 'nikon.jpg'), path.join(dir, 'IMG_1234.jpg'));
+      fs.copyFileSync(path.join(MEDIA(), 'video.webm'), path.join(dir, 'IMG_1234.webm')); // Live Photo-filmpje
+      fs.copyFileSync(path.join(MEDIA(), 'staand.webm'), path.join(dir, 'clip.webm')); // gewoon filmpje
+      fs.copyFileSync(path.join(MEDIA(), 'zonder-exif.jpg'), path.join(dir, 'ander.jpg')); // andere foto
+      await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
+      await page.setInputFiles('#fileInput', fs.readdirSync(dir).map((f) => path.join(dir, f)));
+      await expect(page.locator('#count')).toContainText("3 foto's en 1 filmpje geselecteerd");
+      await expect(page.locator('#count')).toContainText('1 dubbele overgeslagen');
+      await expect(page.locator('#count')).toContainText('1 Live Photo-filmpje overgeslagen');
+      await page.click('#startBtn');
+      const names = async () => page.evaluate(() => {
+        const s = /** @type {any} */ (window).diashow.state;
+        return s.order.length;
+      });
+      expect(await names()).toBe(4); // ander.jpg, clip.webm, IMG_1234.jpg, tuin.jpg
+      await page.keyboard.press('g');
+      await expect(page.locator('.thumb')).toHaveCount(4);
+      await expect(page.locator('.thumb[aria-label*="tuin (1)"]')).toHaveCount(0);
+      await expect(page.locator('.thumb[aria-label*="IMG_1234.webm"]')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+
+      // Live Photo-filmpjes toch tonen
+      await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#start')).toBeVisible();
+      await page.uncheck('#skipLive');
+      await expect(page.locator('#count')).toContainText("3 foto's en 2 filmpjes geselecteerd");
+      await expect(page.locator('#count')).not.toContainText('Live Photo');
+      await page.click('#startBtn');
+      expect(await names()).toBe(5);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('list from the Windows launcher: reports the duplicates it left out and skips Live Photo videos', async ({ page }) => {
+    const env = await setup();
+    try {
+      fs.copyFileSync(path.join(MEDIA(), 'video.webm'), path.join(env.photos, 'nikon.webm'));
+      const lijstPad = path.join(path.dirname(new URL(env.url).pathname), 'diashow-lijst.js');
+      const files = ['canon.jpg', 'foto1.png', 'nikon.jpg', 'nikon.webm', 'zonder-exif.jpg'];
+      const lijst = fs.readFileSync(lijstPad, 'utf8')
+        .replace(/DIASHOW_FILES = .*;/, `DIASHOW_FILES = ${JSON.stringify(files)};`)
+        .replace(/DIASHOW_TIMES = .*;/, `DIASHOW_TIMES = ${JSON.stringify(files.map(() => 0))};`) + 'window.DIASHOW_DUBBEL = 2;\n';
+      fs.writeFileSync(lijstPad, lijst);
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).diashow.state.order.length)).toBe(4);
+      await expect(page.locator('#count')).toContainText('2 dubbele overgeslagen');
+      await expect(page.locator('#count')).toContainText('1 Live Photo-filmpje overgeslagen');
+    } finally { await env.cleanup(); }
+  });
+});
