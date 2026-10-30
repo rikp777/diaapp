@@ -108,7 +108,6 @@
   }
   .slide img.kb { animation: kenburns var(--kb-dur, 6s) linear forwards; will-change: transform; }
   #show.paused .slide img.kb { animation-play-state: paused; }
-  @media (prefers-reduced-motion: reduce) { .slide img.kb { animation: none; } }
 
   #bar {
     position: absolute; left: 50%; bottom: 24px; transform: translate(-50%, 12px);
@@ -245,12 +244,14 @@
         <input type="checkbox" id="loop" checked>
       </div>
       <div class="setting">
-        <label for="fill">Scherm vullen (bijsnijden)</label>
+        <label for="fill">Scherm vullen
+          <small>Geen zwarte randen; foto's worden bijgesneden (ook met <kbd>V</kbd> of de knop in de balk)</small>
+        </label>
         <input type="checkbox" id="fill">
       </div>
       <div class="setting">
-        <label for="kenburns">Ken Burns-effect (langzaam inzoomen en schuiven)
-          <small>Alleen voor foto's; uit als je systeem minder beweging vraagt</small>
+        <label for="kenburns">Bewegende foto's
+          <small>Foto's langzaam inzoomen en verschuiven (ook met <kbd>A</kbd> of de knop in de balk)</small>
         </label>
         <input type="checkbox" id="kenburns">
       </div>
@@ -263,8 +264,8 @@
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>G</kbd> overzicht &nbsp;
-      <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> stoppen
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> instellingen
     </div>
   </div>
 </section>
@@ -296,6 +297,12 @@
     <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
     </button>
+    <button class="icon" id="fillBtn" type="button" title="Scherm vullen (V)" aria-label="Scherm vullen" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2zM7 7h10v10H7z"/></svg>
+    </button>
+    <button class="icon" id="kbBtn" type="button" title="Bewegende foto's (A)" aria-label="Bewegende foto's" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"/></svg>
+    </button>
     <button class="icon" id="muteBtn" type="button" title="Geluid (M)" aria-label="Geluid uit">
       <svg viewBox="0 0 24 24" id="muteIcon" aria-hidden="true"></svg>
     </button>
@@ -307,8 +314,8 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
     </button>
     <span id="pos" aria-live="off"></span>
-    <button class="icon" id="exitBtn" type="button" title="Stoppen (Esc)" aria-label="Stoppen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    <button class="icon" id="exitBtn" type="button" title="Instellingen (Esc)" aria-label="Instellingen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.48.48 0 0 0 13.92 2h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.72 8.47a.48.48 0 0 0 .12.61l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.3.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
     </button>
   </div>
 
@@ -384,7 +391,6 @@
     $(k).addEventListener('change', (e) => { settings[k] = e.target.checked; save(); });
   }
 
-  const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
   // ---------- Bestanden kiezen ----------
   // { path, type: 'image' | 'video', file? (gekozen bestand) | src? (relatieve URL uit de lijst), bad? }
@@ -684,13 +690,14 @@
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
-  function kenBurnsOn() { return settings.kenburns && !reducedMotion.matches; }
-  function applyKenBurns(img) {
+  // Alleen aan als de gebruiker het zelf aanzet (standaard uit)
+  function kenBurnsOn() { return settings.kenburns; }
+  function applyKenBurns(img, durMs = settings.seconds * 1000 + FADE) {
     const angle = Math.random() * Math.PI * 2;
     const r = 4.5; // %, binnen de 6% die inzoomen tot 1.12 aan elke kant oplevert
     img.style.setProperty('--kb-x', `${(Math.cos(angle) * r).toFixed(2)}%`);
     img.style.setProperty('--kb-y', `${(Math.sin(angle) * r).toFixed(2)}%`);
-    img.style.setProperty('--kb-dur', `${settings.seconds * 1000 + FADE}ms`);
+    img.style.setProperty('--kb-dur', `${Math.max(1000, durMs)}ms`);
     img.classList.add('kb');
   }
 
@@ -1009,6 +1016,31 @@
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
   }
 
+  function toggleFill() {
+    settings.fill = !settings.fill;
+    save();
+    show.classList.toggle('fill', settings.fill);
+    updateButtons();
+    toast(settings.fill ? 'Scherm vullen aan' : 'Scherm vullen uit');
+  }
+
+  function toggleKenBurns() {
+    settings.kenburns = !settings.kenburns;
+    save();
+    const img = slides[front].querySelector('img');
+    if (img) {
+      if (settings.kenburns) {
+        // Vanaf nu bewegen tot het eind van deze dia
+        const left = timerTotal ? (timer ? timerRemaining - (performance.now() - timerStart) : timerRemaining) : settings.seconds * 1000;
+        applyKenBurns(img, left + FADE);
+      } else {
+        img.classList.remove('kb');
+      }
+    }
+    updateButtons();
+    toast(settings.kenburns ? "Bewegende foto's aan" : "Bewegende foto's uit");
+  }
+
   function toggleFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else document.documentElement.requestFullscreen?.().catch(() => {});
@@ -1023,6 +1055,10 @@
     $('muteBtn').setAttribute('aria-label', muted ? 'Geluid aan' : 'Geluid uit');
     $('shuffleBtn').classList.toggle('on', settings.shuffle);
     $('shuffleBtn').setAttribute('aria-pressed', String(settings.shuffle));
+    $('fillBtn').classList.toggle('on', settings.fill);
+    $('fillBtn').setAttribute('aria-pressed', String(settings.fill));
+    $('kbBtn').classList.toggle('on', settings.kenburns);
+    $('kbBtn').setAttribute('aria-pressed', String(settings.kenburns));
     if (Number($('volume').value) !== settings.volume) $('volume').value = settings.volume;
     show.classList.toggle('paused', !playing);
   }
@@ -1230,6 +1266,8 @@
   $('playBtn').onclick = togglePlay;
   $('muteBtn').onclick = toggleMute;
   $('shuffleBtn').onclick = toggleShuffle;
+  $('kbBtn').onclick = toggleKenBurns;
+  $('fillBtn').onclick = toggleFill;
   $('gridBtn').onclick = openGrid;
   $('fsBtn').onclick = toggleFullscreen;
   $('exitBtn').onclick = stop;
@@ -1270,6 +1308,8 @@
       case 'f': case 'F': toggleFullscreen(); break;
       case 'm': case 'M': toggleMute(); break;
       case 's': case 'S': toggleShuffle(); break;
+      case 'a': case 'A': toggleKenBurns(); break;
+      case 'v': case 'V': toggleFill(); break;
       case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;

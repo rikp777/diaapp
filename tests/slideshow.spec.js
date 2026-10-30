@@ -708,3 +708,73 @@ test.describe('Windows-download (één bestand)', () => {
     expect(/[^\x00-\x7f]/.test(bat.slice(0, bat.indexOf('#DIAHTML#')))).toBe(false);
   });
 });
+
+test.describe("bewegende foto's (animatie)", () => {
+  const currentImgHasKb = (page) => page.evaluate(() =>
+    !!document.querySelector('.slide.visible img')?.classList.contains('kb'));
+
+  test('A and the bar button turn it on/off for the current photo, and it is remembered', async ({ page }) => {
+    await startShow(page, BASIC);
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    expect(await currentImgHasKb(page)).toBe(false);
+    await page.keyboard.press('a');
+    await expect.poll(() => currentImgHasKb(page)).toBe(true);
+    await expect(page.locator('#kbBtn')).toHaveAttribute('aria-pressed', 'true');
+    expect((await storedSettings(page)).kenburns).toBe(true);
+
+    await page.mouse.move(640, 300);
+    await page.click('#kbBtn');
+    await expect.poll(() => currentImgHasKb(page)).toBe(false);
+    await expect(page.locator('#kbBtn')).toHaveAttribute('aria-pressed', 'false');
+    expect((await storedSettings(page)).kenburns).toBe(false);
+  });
+
+  test('the settings button in the bar opens the settings screen with the option', async ({ page }) => {
+    await startShow(page, BASIC);
+    await page.keyboard.press('a');
+    await page.mouse.move(640, 300);
+    await page.click('#exitBtn');
+    await expect(page.locator('#start')).toBeVisible();
+    await expect(page.locator('#kenburns')).toBeChecked();
+    await expect(page.locator('label[for="kenburns"]')).toContainText("Bewegende foto's");
+  });
+
+  test('works when the computer asks for reduced motion, if the user turned it on', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.check('#kenburns');
+    await page.setInputFiles('#fileInput', media(...BASIC));
+    await page.click('#startBtn');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await expect.poll(() => currentImgHasKb(page)).toBe(true);
+    const animating = await page.evaluate(() =>
+      document.querySelector('.slide.visible img').getAnimations().length > 0);
+    expect(animating).toBe(true);
+  });
+});
+
+test.describe('scherm vullen', () => {
+  const fit = (page) => page.evaluate(() => {
+    const img = document.querySelector('.slide.visible img');
+    return img ? getComputedStyle(img).objectFit : null;
+  });
+
+  test('V and the bar button switch fill immediately, and it is remembered', async ({ page }) => {
+    await startShow(page, BASIC);
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    expect(await fit(page)).toBe('contain');
+    await page.keyboard.press('v');
+    await expect.poll(() => fit(page)).toBe('cover');
+    await expect(page.locator('#fillBtn')).toHaveAttribute('aria-pressed', 'true');
+    expect((await storedSettings(page)).fill).toBe(true);
+
+    await page.mouse.move(640, 300);
+    await page.click('#fillBtn');
+    await expect.poll(() => fit(page)).toBe('contain');
+    expect((await storedSettings(page)).fill).toBe(false);
+
+    await page.keyboard.press('v');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#fill')).toBeChecked();
+  });
+});

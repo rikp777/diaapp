@@ -51,8 +51,8 @@ Bestanden worden op naam gesorteerd, met getallen in de goede volgorde
 | Geluid van filmpjes uit | Filmpjes zonder geluid afspelen. |
 | Willekeurige volgorde | Husselt de volgorde. |
 | Herhalen na laatste | Begint na de laatste dia weer opnieuw. |
-| Scherm vullen | Snijdt foto's bij zodat er geen zwarte randen zijn. |
-| Ken Burns-effect | Foto's langzaam inzoomen en verschuiven (standaard uit). |
+| Scherm vullen | Snijdt foto's bij zodat er geen zwarte randen zijn. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
+| Bewegende foto's | Foto's langzaam inzoomen en verschuiven (standaard uit). Ook tijdens de voorstelling aan/uit met `A` of de knop met het vergrootglas. |
 
 Instellingen worden onthouden in de browser (`localStorage`).
 
@@ -68,8 +68,10 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `F` of dubbelklik | Volledig scherm aan/uit |
 | `M` | Geluid aan/uit |
 | `S` | Willekeurige volgorde aan/uit |
+| `A` | Bewegende foto's aan/uit |
+| `V` | Scherm vullen aan/uit |
 | `G` | Miniatuuroverzicht openen/sluiten |
-| `Esc` | Sluit eerst het overzicht, dan volledig scherm, en stopt daarna de voorstelling |
+| `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
 
 Beweeg de muis om de bedieningsbalk te tonen (met o.a. een volumeschuif); als
 de muis stilstaat verdwijnt hij weer. In het **miniatuuroverzicht** klik je op
