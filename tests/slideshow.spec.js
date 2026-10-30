@@ -752,3 +752,29 @@ test.describe("bewegende foto's (animatie)", () => {
     expect(animating).toBe(true);
   });
 });
+
+test.describe('scherm vullen', () => {
+  const fit = (page) => page.evaluate(() => {
+    const img = document.querySelector('.slide.visible img');
+    return img ? getComputedStyle(img).objectFit : null;
+  });
+
+  test('V and the bar button switch fill immediately, and it is remembered', async ({ page }) => {
+    await startShow(page, BASIC);
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    expect(await fit(page)).toBe('contain');
+    await page.keyboard.press('v');
+    await expect.poll(() => fit(page)).toBe('cover');
+    await expect(page.locator('#fillBtn')).toHaveAttribute('aria-pressed', 'true');
+    expect((await storedSettings(page)).fill).toBe(true);
+
+    await page.mouse.move(640, 300);
+    await page.click('#fillBtn');
+    await expect.poll(() => fit(page)).toBe('contain');
+    expect((await storedSettings(page)).fill).toBe(false);
+
+    await page.keyboard.press('v');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#fill')).toBeChecked();
+  });
+});

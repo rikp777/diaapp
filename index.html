@@ -244,7 +244,9 @@
         <input type="checkbox" id="loop" checked>
       </div>
       <div class="setting">
-        <label for="fill">Scherm vullen (bijsnijden)</label>
+        <label for="fill">Scherm vullen
+          <small>Geen zwarte randen; foto's worden bijgesneden (ook met <kbd>V</kbd> of de knop in de balk)</small>
+        </label>
         <input type="checkbox" id="fill">
       </div>
       <div class="setting">
@@ -262,7 +264,7 @@
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>G</kbd> overzicht &nbsp;
       <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> instellingen
     </div>
   </div>
@@ -294,6 +296,9 @@
     <div class="sep"></div>
     <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    </button>
+    <button class="icon" id="fillBtn" type="button" title="Scherm vullen (V)" aria-label="Scherm vullen" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2zM7 7h10v10H7z"/></svg>
     </button>
     <button class="icon" id="kbBtn" type="button" title="Bewegende foto's (A)" aria-label="Bewegende foto's" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"/></svg>
@@ -1011,6 +1016,14 @@
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
   }
 
+  function toggleFill() {
+    settings.fill = !settings.fill;
+    save();
+    show.classList.toggle('fill', settings.fill);
+    updateButtons();
+    toast(settings.fill ? 'Scherm vullen aan' : 'Scherm vullen uit');
+  }
+
   function toggleKenBurns() {
     settings.kenburns = !settings.kenburns;
     save();
@@ -1042,6 +1055,8 @@
     $('muteBtn').setAttribute('aria-label', muted ? 'Geluid aan' : 'Geluid uit');
     $('shuffleBtn').classList.toggle('on', settings.shuffle);
     $('shuffleBtn').setAttribute('aria-pressed', String(settings.shuffle));
+    $('fillBtn').classList.toggle('on', settings.fill);
+    $('fillBtn').setAttribute('aria-pressed', String(settings.fill));
     $('kbBtn').classList.toggle('on', settings.kenburns);
     $('kbBtn').setAttribute('aria-pressed', String(settings.kenburns));
     if (Number($('volume').value) !== settings.volume) $('volume').value = settings.volume;
@@ -1252,6 +1267,7 @@
   $('muteBtn').onclick = toggleMute;
   $('shuffleBtn').onclick = toggleShuffle;
   $('kbBtn').onclick = toggleKenBurns;
+  $('fillBtn').onclick = toggleFill;
   $('gridBtn').onclick = openGrid;
   $('fsBtn').onclick = toggleFullscreen;
   $('exitBtn').onclick = stop;
@@ -1293,6 +1309,7 @@
       case 'm': case 'M': toggleMute(); break;
       case 's': case 'S': toggleShuffle(); break;
       case 'a': case 'A': toggleKenBurns(); break;
+      case 'v': case 'V': toggleFill(); break;
       case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;
