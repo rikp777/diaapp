@@ -112,6 +112,11 @@ juiste dag en druk op `Enter`. De datum wordt in de foto zelf opgeslagen als
 opnamedatum (Windows: *Genomen op*); de tijd van de opname blijft hetzelfde.
 Net als bij bijschrift en plek: alleen bij JPG-foto's, met reservekopie.
 
+Wil je bij één foto geen datum zien? Zet in hetzelfde venster een vinkje bij
+**Datum bij deze foto niet tonen**. Dat wordt als label in de foto bewaard
+(Windows: *Labels* → "Diavoorstelling: geen datum"); bestaande labels blijven
+staan. De schakelaar **Datum tonen** geldt voor alle foto's tegelijk.
+
 Op het instellingenscherm zet je los van elkaar aan of uit:
 **Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht),
 **Datum tonen** en **Bestandsnaam tonen** (linksboven, standaard uit).

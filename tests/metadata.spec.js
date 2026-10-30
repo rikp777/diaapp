@@ -859,3 +859,59 @@ test.describe('datum aanpassen', () => {
     }
   });
 });
+
+test.describe('datum per foto verbergen', () => {
+  test('the checkbox hides the date for this photo only (label in the photo); existing labels are kept', async ({ page }) => {
+    const env = await setup();
+    try {
+      expect(readMeta(env.file('canon.jpg')).labels).toBe('Vakantie;Strand');
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#date')).toHaveText('1 juli 2024');
+      await page.keyboard.press('d');
+      await expect(page.locator('#hideDateRow')).toBeVisible();
+      await expect(page.locator('#hideDateBox')).not.toBeChecked();
+      await page.check('#hideDateBox');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#toast')).toHaveText('Datum wordt bij deze foto niet getoond');
+      await expect(page.locator('#date')).toBeHidden();
+      await expect(page.locator('#place')).toHaveText('Utrecht'); // de rest blijft
+      const meta = readMeta(env.file('canon.jpg'));
+      expect(meta.labels).toBe('Vakantie;Strand;Diavoorstelling: geen datum');
+      expect(meta.dateOriginal).toBe('2024:07:01 11:59:58'); // de datum zelf is niet veranderd
+
+      // Andere foto's tonen de datum gewoon
+      await page.keyboard.press('ArrowRight');
+      await expect(page.locator('#name')).toHaveText('foto1.png');
+      await expect(page.locator('#date')).toHaveText('1 mei 2020');
+
+      // Na opnieuw openen nog steeds verborgen; daarna weer aanzetten
+      await page.reload();
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      await expect(page.locator('#date')).toBeHidden();
+      await page.keyboard.press('d');
+      await expect(page.locator('#hideDateBox')).toBeChecked();
+      await page.uncheck('#hideDateBox');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#toast')).toHaveText('Datum wordt bij deze foto weer getoond');
+      await expect(page.locator('#date')).toHaveText('1 juli 2024');
+      expect(readMeta(env.file('canon.jpg')).labels).toBe('Vakantie;Strand');
+    } finally { await env.cleanup(); }
+  });
+
+  test('hiding the date of a photo without an EXIF date does not write the file date into the photo', async ({ page }) => {
+    const env = await setup();
+    try {
+      await openShow(page, env, 'nikon.jpg');
+      await expect(page.locator('#date')).toHaveText('1 mei 2020'); // bestandsdatum
+      await page.keyboard.press('d');
+      await expect(page.locator('#dateInput')).toHaveValue('2020-05-01');
+      await page.check('#hideDateBox');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#date')).toBeHidden();
+      const meta = readMeta(env.file('nikon.jpg'));
+      expect(meta.labels).toBe('Diavoorstelling: geen datum');
+      expect(meta.dateOriginal).toBe(null); // geen opnamedatum toegevoegd
+    } finally { await env.cleanup(); }
+  });
+});
