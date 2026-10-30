@@ -601,3 +601,60 @@ test.describe('lijst-modus (diashow-lijst.js)', () => {
     await expect(page.locator('#count')).toContainText('uit deze map');
   });
 });
+
+test.describe('na review', () => {
+  test('previous on the first slide with loop off does not reload it', async ({ page }) => {
+    await openApp(page);
+    await page.uncheck('#loop');
+    await page.setInputFiles('#fileInput', media(...BASIC));
+    await page.click('#startBtn');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await ensureNotFullscreen(page);
+    await page.waitForTimeout(500);
+    // Mark the shown element; a reload would replace it with a new one
+    await page.evaluate(() => { /** @type {any} */ (document.querySelector('.slide.visible img')).__mark = 1; });
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(1200);
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    expect(await page.evaluate(() => /** @type {any} */ (document.querySelector('.slide.visible img'))?.__mark)).toBe(1);
+  });
+
+  test('Enter in the seconds field starts with the typed value', async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles('#fileInput', media(...BASIC));
+    await page.fill('#seconds', '7');
+    await page.press('#seconds', 'Enter');
+    await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+    await expect(page.locator('#barSeconds')).toHaveValue('7');
+  });
+
+  test('Tab into the hidden bar shows it; stopping focuses the start button', async ({ page }) => {
+    await startShow(page, BASIC);
+    await page.evaluate(() => document.getElementById('show').classList.remove('ui'));
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#show')).toHaveClass(/\bui\b/);
+    expect(await page.evaluate(() => !!document.activeElement.closest('#bar'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#start')).toBeVisible();
+    await expect(page.locator('#startBtn')).toBeFocused();
+  });
+
+  test('double-click on a thumbnail jumps without toggling fullscreen', async ({ page }) => {
+    await startShow(page, BASIC);
+    await page.evaluate(() => {
+      // @ts-ignore
+      window.__fs = 0;
+      const orig = document.documentElement.requestFullscreen.bind(document.documentElement);
+      // @ts-ignore
+      document.documentElement.requestFullscreen = (...a) => { window.__fs++; return orig(...a); };
+    });
+    await page.keyboard.press('g');
+    await expect(page.locator('#grid')).toBeVisible();
+    await page.locator('.thumb[data-pos="2"]').dblclick();
+    await expect(page.locator('#grid')).toBeHidden();
+    await expect(page.locator('#name')).toHaveText('foto10.png');
+    await page.waitForTimeout(400);
+    // @ts-ignore
+    expect(await page.evaluate(() => window.__fs)).toBe(0);
+  });
+});

@@ -62,8 +62,8 @@
     padding: 9px 16px; cursor: pointer; transition: background .15s;
   }
   .btn:hover { background: #3f3f46; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.primary { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+  .btn.primary:hover { background: #1d4ed8; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
   #count { margin-top: 12px; min-height: 1.4em; color: var(--text); }
   .settings { display: grid; gap: 14px; margin: 22px 0; }
@@ -85,6 +85,7 @@
 
   /* ---------- Voorstelling ---------- */
   #show { position: fixed; inset: 0; display: none; cursor: none; }
+  #show:focus { outline: none; }
   #show.active { display: block; }
   #show.ui { cursor: default; }
   .slide {
@@ -269,7 +270,7 @@
 </section>
 
 <!-- Voorstelling -->
-<section id="show">
+<section id="show" tabindex="-1" aria-label="Diavoorstelling">
   <div class="slide" id="slideA"></div>
   <div class="slide" id="slideB"></div>
 
@@ -657,6 +658,7 @@
     updateButtons();
     display(0);
     pokeUI();
+    show.focus({ preventScroll: true });
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
 
@@ -675,6 +677,7 @@
     $('start').classList.remove('hidden');
     syncStartControls();
     updateCount();
+    if (!$('startBtn').disabled) $('startBtn').focus({ preventScroll: true });
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
@@ -758,6 +761,8 @@
 
   async function display(step) {
     if (!order.length) return;
+    // Vorige op de eerste dia zonder herhalen: niets doen (niet opnieuw laden)
+    if (step < 0 && pos === 0 && !settings.loop) return;
     const my = ++token;
     clearTimer();
     clearTimeout(clickTimer);
@@ -858,7 +863,8 @@
       // Autoplay met geluid geblokkeerd: dan zonder geluid proberen
       v.muted = true;
       updateButtons();
-      v.play().catch(() => {
+      v.play().catch((err2) => {
+        if (err2 && err2.name === 'AbortError') return;
         // Ook zonder geluid geen afspelen: niet blijven hangen, na de fototijd door
         if (my === token && v === currentVideo && !timerTotal) scheduleNext(settings.seconds * 1000);
       });
@@ -952,8 +958,17 @@
       timerRemaining = Math.max(0, timerTotal - elapsed);
       if (wasRunning) runTimer(); else drawProgress();
     }
+    // Ken Burns: nieuwe duur, maar vanaf dezelfde stand verder (geen sprong in beeld)
     const img = slides[front].querySelector('img.kb');
-    if (img) img.style.setProperty('--kb-dur', `${settings.seconds * 1000 + FADE}ms`);
+    if (img) {
+      const dur = settings.seconds * 1000 + FADE;
+      const anim = img.getAnimations ? img.getAnimations()[0] : null;
+      const t = anim && anim.effect.getComputedTiming();
+      const progress = t && typeof t.progress === 'number' ? t.progress : null;
+      img.style.setProperty('--kb-dur', `${dur}ms`);
+      const anim2 = img.getAnimations ? img.getAnimations()[0] : null;
+      if (anim2 && progress !== null) anim2.currentTime = progress * dur;
+    }
   }
 
   function toggleMute() {
@@ -1023,6 +1038,7 @@
   const gridItems = $('gridItems');
   const thumbUrls = new Map(); // knop -> url
   let gridWasPlaying = false;
+  let gridClosedAt = 0;
   let gridReturnFocus = null;
   let loadObs = null;
   let unloadObs = null;
@@ -1039,10 +1055,10 @@
     img.src = u;
   }
   function unloadThumb(btn) {
-    const u = thumbUrls.get(btn);
-    if (!u) return;
     const img = btn.querySelector('img');
     if (img) img.removeAttribute('src');
+    const u = thumbUrls.get(btn);
+    if (!u) return;
     URL.revokeObjectURL(u);
     thumbUrls.delete(btn);
   }
@@ -1108,6 +1124,7 @@
   // jumpPos: positie om naartoe te springen (of null); resume: vorige afspeelstand herstellen
   function closeGrid(jumpPos, resume = true) {
     if (!gridOpen()) return;
+    gridClosedAt = performance.now();
     grid.hidden = true;
     grid.classList.remove('open');
     bar.inert = false;
@@ -1168,10 +1185,11 @@
     clearTimeout(uiTimer);
     uiTimer = setTimeout(() => {
       const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible');
-      if (!keepOpen) show.classList.remove('ui');
+      if (keepOpen) pokeUI(); else show.classList.remove('ui');
     }, 2500);
   }
   show.addEventListener('mousemove', pokeUI);
+  bar.addEventListener('focusin', pokeUI);
   show.addEventListener('touchstart', pokeUI, { passive: true });
 
   // Enkele klik pas na korte tijd uitvoeren, zodat een dubbelklik alleen volledig scherm wisselt
@@ -1194,6 +1212,7 @@
   });
   show.addEventListener('dblclick', (e) => {
     if (e.target.closest('#bar, #grid')) return;
+    if (performance.now() - gridClosedAt < 500) return; // tweede klik van een dubbelklik op een miniatuur
     clearTimeout(clickTimer);
     clickTimer = null;
     toggleFullscreen();
@@ -1223,7 +1242,10 @@
 
   document.addEventListener('keydown', (e) => {
     if (!show.classList.contains('active')) {
-      if (e.key === 'Enter' && !$('startBtn').disabled && !['BUTTON', 'SELECT', 'A'].includes(e.target.tagName)) start();
+      if (e.key === 'Enter' && !$('startBtn').disabled && !['BUTTON', 'SELECT', 'A'].includes(e.target.tagName)) {
+        if (e.target.id === 'seconds') { settings.seconds = clampSeconds(e.target.value); e.target.value = settings.seconds; save(); }
+        start();
+      }
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
