@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diavoorstelling</title>
+<style>
+  :root {
+    --bg: #000;
+    --panel: rgba(20, 20, 22, 0.82);
+    --panel-solid: #18181b;
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f4f4f5;
+    --muted: #a1a1aa;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --fade: 800ms;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  button, input, select { font: inherit; color: inherit; }
+
+  /* ---------- Startscherm ---------- */
+  #start {
+    position: fixed; inset: 0;
+    display: flex;
+    padding: 16px;
+    background: radial-gradient(ellipse at top, #1e293b 0%, #09090b 70%);
+    overflow-y: auto;
+  }
+  #start.hidden { display: none; }
+  .card {
+    margin: auto;
+    width: min(560px, 100%);
+    background: var(--panel-solid);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .card h1 { margin: 0 0 4px; font-size: 24px; font-weight: 600; }
+  .card p.sub { margin: 0 0 20px; color: var(--muted); }
+  #drop {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted);
+    transition: border-color .15s, background .15s;
+  }
+  #drop.over { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); color: var(--text); }
+  .pick-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .btn {
+    background: #27272a; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px; cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: #3f3f46; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  #count { margin-top: 12px; min-height: 1.4em; color: var(--text); }
+  .settings { display: grid; gap: 14px; margin: 22px 0; }
+  .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .setting label { flex: 1 1 200px; }
+  .setting small { display: block; color: var(--muted); }
+  .num { display: flex; align-items: center; gap: 6px; }
+  .num input {
+    width: 76px; padding: 7px 8px; text-align: right;
+    background: #09090b; border: 1px solid var(--border); border-radius: 6px;
+  }
+  select { padding: 7px 8px; background: #09090b; border: 1px solid var(--border); border-radius: 6px; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .keys { margin-top: 18px; color: var(--muted); font-size: 13px; }
+  kbd {
+    display: inline-block; padding: 1px 6px; border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 4px; background: #09090b; font: 12px ui-monospace, monospace;
+  }
+
+  /* ---------- Voorstelling ---------- */
+  #show { position: fixed; inset: 0; display: none; cursor: none; }
+  #show.active { display: block; }
+  #show.ui { cursor: default; }
+  .slide {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    opacity: 0; transition: opacity var(--fade) ease;
+  }
+  .slide.visible { opacity: 1; }
+  .slide img, .slide video {
+    max-width: 100%; max-height: 100%;
+    width: 100%; height: 100%;
+    object-fit: contain;
+  }
+  .fill .slide img, .fill .slide video { object-fit: cover; }
+
+  #bar {
+    position: absolute; left: 50%; bottom: 24px; transform: translate(-50%, 12px);
+    display: flex; align-items: center; gap: 4px;
+    width: max-content; max-width: calc(100% - 32px);
+    padding: 6px 10px;
+    background: var(--panel); backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 12px;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+    flex-wrap: wrap; justify-content: center;
+  }
+  #show.ui #bar { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+  .icon {
+    width: 40px; height: 40px; display: grid; place-items: center;
+    background: none; border: 0; border-radius: 8px; cursor: pointer;
+  }
+  .icon:hover { background: rgba(255, 255, 255, 0.1); }
+  .icon.on { color: var(--accent); }
+  .icon svg { width: 22px; height: 22px; fill: currentColor; }
+  .sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
+  #bar .num input { width: 58px; padding: 5px 6px; }
+  #bar .num span { color: var(--muted); font-size: 13px; }
+  #pos { color: var(--muted); font-size: 13px; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  #info {
+    position: absolute; top: 16px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; gap: 12px;
+    opacity: 0; transition: opacity .25s; pointer-events: none;
+    text-shadow: 0 1px 3px #000;
+    font-size: 14px;
+  }
+  #show.ui #info { opacity: 1; }
+  #name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  #progress {
+    position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+    background: var(--accent); opacity: .8;
+  }
+  #progress.hidden { display: none; }
+
+  #toast {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    padding: 14px 22px; border-radius: 12px; background: var(--panel);
+    font-size: 18px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  @media (max-width: 520px) {
+    .card { padding: 20px; }
+    #bar { bottom: 12px; }
+    .icon { width: 36px; height: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Startscherm -->
+<section id="start">
+  <div class="card">
+    <h1>Diavoorstelling</h1>
+    <p class="sub">Foto's en filmpjes van je eigen computer. Er wordt niets geüpload.</p>
+
+    <div id="drop">
+      Sleep foto's, filmpjes of een map hierheen
+      <div class="pick-row">
+        <button class="btn" id="pickFiles">Bestanden kiezen…</button>
+        <button class="btn" id="pickFolder">Map kiezen…</button>
+      </div>
+      <div id="count"></div>
+    </div>
+    <input type="file" id="fileInput" multiple accept="image/*,video/*" hidden>
+    <input type="file" id="folderInput" webkitdirectory multiple hidden>
+
+    <div class="settings">
+      <div class="setting">
+        <label for="seconds">Seconden per foto</label>
+        <div class="num"><input type="number" id="seconds" min="1" max="3600" step="1" value="5"> s</div>
+      </div>
+      <div class="setting">
+        <label for="videoMode">Filmpjes
+          <small>Hoe lang een filmpje te zien is</small>
+        </label>
+        <select id="videoMode">
+          <option value="full">Helemaal afspelen</option>
+          <option value="interval">Zelfde tijd als foto's</option>
+        </select>
+      </div>
+      <div class="setting">
+        <label for="muted">Geluid van filmpjes uit</label>
+        <input type="checkbox" id="muted">
+      </div>
+      <div class="setting">
+        <label for="shuffle">Willekeurige volgorde</label>
+        <input type="checkbox" id="shuffle">
+      </div>
+      <div class="setting">
+        <label for="loop">Herhalen na laatste</label>
+        <input type="checkbox" id="loop" checked>
+      </div>
+      <div class="setting">
+        <label for="fill">Scherm vullen (bijsnijden)</label>
+        <input type="checkbox" id="fill">
+      </div>
+    </div>
+
+    <div class="pick-row">
+      <button class="btn primary" id="startBtn" disabled>Diavoorstelling starten</button>
+    </div>
+
+    <div class="keys">
+      <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
+      <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
+      <kbd>M</kbd> geluid &nbsp; <kbd>Esc</kbd> stoppen
+    </div>
+  </div>
+</section>
+
+<!-- Voorstelling -->
+<section id="show">
+  <div class="slide" id="slideA"></div>
+  <div class="slide" id="slideB"></div>
+
+  <div id="info"><span id="name"></span></div>
+  <div id="toast"></div>
+  <div id="progress"></div>
+
+  <div id="bar">
+    <button class="icon" id="prevBtn" title="Vorige (←)">
+      <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+    </button>
+    <button class="icon" id="playBtn" title="Afspelen/pauze (spatie)">
+      <svg viewBox="0 0 24 24" id="playIcon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    </button>
+    <button class="icon" id="nextBtn" title="Volgende (→)">
+      <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+    </button>
+    <div class="sep"></div>
+    <div class="num" title="Seconden per foto">
+      <input type="number" id="barSeconds" min="1" max="3600" step="1"><span>sec</span>
+    </div>
+    <div class="sep"></div>
+    <button class="icon" id="shuffleBtn" title="Willekeurig">
+      <svg viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    </button>
+    <button class="icon" id="muteBtn" title="Geluid (M)">
+      <svg viewBox="0 0 24 24" id="muteIcon"></svg>
+    </button>
+    <button class="icon" id="fsBtn" title="Volledig scherm (F)">
+      <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+    </button>
+    <span id="pos"></span>
+    <button class="icon" id="exitBtn" title="Stoppen (Esc)">
+      <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+  </div>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|avif|svg|ico|jfif|heic|heif)$/i;
+  const VIDEO_EXT = /\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi|3gp)$/i;
+  const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
+  const ICON_PAUSE = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  const ICON_SOUND = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+  const ICON_MUTE = '<path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>';
+
+  // ---------- Instellingen (onthouden in de browser) ----------
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false };
+  const settings = { ...defaults };
+  try { Object.assign(settings, JSON.parse(localStorage.getItem('diashow-settings') || '{}')); } catch {}
+  const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
+
+  $('seconds').value = settings.seconds;
+  $('videoMode').value = settings.videoMode;
+  $('muted').checked = settings.muted;
+  $('shuffle').checked = settings.shuffle;
+  $('loop').checked = settings.loop;
+  $('fill').checked = settings.fill;
+
+  const clampSeconds = (v) => Math.min(3600, Math.max(1, Number(v) || defaults.seconds));
+  $('seconds').addEventListener('change', (e) => { settings.seconds = clampSeconds(e.target.value); e.target.value = settings.seconds; save(); });
+  $('videoMode').addEventListener('change', (e) => { settings.videoMode = e.target.value; save(); });
+  for (const k of ['muted', 'shuffle', 'loop', 'fill']) {
+    $(k).addEventListener('change', (e) => { settings[k] = e.target.checked; save(); });
+  }
+
+  // ---------- Bestanden kiezen ----------
+  let media = []; // { file, type: 'image' | 'video', url? }
+
+  const kindOf = (file) => {
+    if (file.type.startsWith('image/') || IMAGE_EXT.test(file.name)) return 'image';
+    if (file.type.startsWith('video/') || VIDEO_EXT.test(file.name)) return 'video';
+    return null;
+  };
+  const pathOf = (f) => f.webkitRelativePath || f._path || f.name;
+  const collator = new Intl.Collator('nl', { numeric: true, sensitivity: 'base' });
+
+  function setFiles(files) {
+    for (const m of media) if (m.url) URL.revokeObjectURL(m.url);
+    media = [...files]
+      .map((file) => ({ file, type: kindOf(file) }))
+      .filter((m) => m.type)
+      .sort((a, b) => collator.compare(pathOf(a.file), pathOf(b.file)));
+    const photos = media.filter((m) => m.type === 'image').length;
+    const videos = media.length - photos;
+    $('count').textContent = media.length
+      ? `${photos} foto${photos === 1 ? '' : "'s"} en ${videos} filmpje${videos === 1 ? '' : 's'} geselecteerd`
+      : 'Geen foto\'s of filmpjes gevonden.';
+    $('startBtn').disabled = !media.length;
+  }
+
+  $('pickFiles').onclick = () => $('fileInput').click();
+  $('pickFolder').onclick = () => $('folderInput').click();
+  $('fileInput').onchange = (e) => setFiles(e.target.files);
+  $('folderInput').onchange = (e) => setFiles(e.target.files);
+
+  // Slepen en neerzetten, inclusief mappen
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, () => drop.classList.remove('over')));
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+
+  drop.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    if (!entries.length) return setFiles(e.dataTransfer.files);
+    const out = [];
+    await Promise.all(entries.map((en) => walk(en, out)));
+    setFiles(out);
+  });
+
+  function walk(entry, out) {
+    if (entry.isFile) {
+      return new Promise((res) => entry.file((f) => { f._path = entry.fullPath; out.push(f); res(); }, () => res()));
+    }
+    if (entry.isDirectory) {
+      const reader = entry.createReader();
+      return new Promise((res) => {
+        const all = [];
+        const read = () => reader.readEntries(async (batch) => {
+          if (!batch.length) { await Promise.all(all.map((c) => walk(c, out))); res(); return; }
+          all.push(...batch); read();
+        }, () => res());
+        read();
+      });
+    }
+    return Promise.resolve();
+  }
+
+  // ---------- Voorstelling ----------
+  const show = $('show');
+  const slides = [$('slideA'), $('slideB')];
+  let front = 0;
+  let order = [];
+  let pos = 0;
+  let playing = true;
+  let timer = null;
+  let timerStart = 0;
+  let timerRemaining = 0;
+  let timerTotal = 0;
+  let progressRaf = null;
+  let currentVideo = null;
+  let token = 0;
+
+  const urlOf = (m) => (m.url ||= URL.createObjectURL(m.file));
+
+  function buildOrder(keepCurrent) {
+    const current = order[pos];
+    order = media.map((_, i) => i);
+    if (settings.shuffle) {
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+    }
+    if (keepCurrent && current !== undefined) {
+      const at = order.indexOf(current);
+      [order[0], order[at]] = [order[at], order[0]];
+      pos = 0;
+    }
+  }
+
+  function start() {
+    buildOrder(false);
+    pos = 0;
+    playing = true;
+    $('start').classList.add('hidden');
+    show.classList.add('active');
+    show.classList.toggle('fill', settings.fill);
+    $('barSeconds').value = settings.seconds;
+    updateButtons();
+    display(0);
+    pokeUI();
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  }
+
+  function stop() {
+    clearTimer();
+    token++;
+    for (const s of slides) { s.classList.remove('visible'); s.innerHTML = ''; }
+    currentVideo = null;
+    show.classList.remove('active', 'ui');
+    $('start').classList.remove('hidden');
+    $('seconds').value = settings.seconds;
+    $('shuffle').checked = settings.shuffle;
+    $('muted').checked = settings.muted;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+
+  async function display(step) {
+    const my = ++token;
+    clearTimer();
+    if (step) {
+      let next = pos + step;
+      if (next >= order.length) {
+        if (!settings.loop) { playing = false; updateButtons(); toast('Einde'); return; }
+        if (settings.shuffle) buildOrder(false);
+        next = 0;
+      } else if (next < 0) {
+        next = settings.loop ? order.length - 1 : 0;
+      }
+      pos = next;
+    }
+
+    const m = media[order[pos]];
+    const back = slides[1 - front];
+    back.innerHTML = '';
+
+    let el;
+    if (m.type === 'image') {
+      el = new Image();
+      el.decoding = 'async';
+      el.src = urlOf(m);
+      try { await el.decode(); } catch {}
+    } else {
+      el = document.createElement('video');
+      el.src = urlOf(m);
+      el.playsInline = true;
+      el.muted = settings.muted;
+      el.preload = 'auto';
+      await new Promise((res) => {
+        el.addEventListener('loadeddata', res, { once: true });
+        el.addEventListener('error', res, { once: true });
+      });
+    }
+    if (my !== token) return;
+
+    back.appendChild(el);
+    // Kruislings vervagen tussen de twee lagen
+    back.classList.add('visible');
+    slides[front].classList.remove('visible');
+    const old = slides[front];
+    const oldVideo = old.querySelector('video');
+    if (oldVideo) oldVideo.pause();
+    setTimeout(() => { if (my === token) old.innerHTML = ''; }, 900);
+    front = 1 - front;
+
+    currentVideo = m.type === 'video' ? el : null;
+    $('name').textContent = pathOf(m.file).replace(/^\//, '');
+    $('pos').textContent = `${pos + 1} / ${order.length}`;
+
+    if (currentVideo) {
+      if (el.error) { toast('Filmpje kan niet worden afgespeeld'); scheduleNext(settings.seconds * 1000); return; }
+      currentVideo.addEventListener('ended', () => { if (my === token && playing) display(1); });
+      if (playing) playVideo(currentVideo);
+      if (settings.videoMode === 'interval') scheduleNext(settings.seconds * 1000);
+      else { $('progress').classList.add('hidden'); }
+    } else {
+      scheduleNext(settings.seconds * 1000);
+    }
+    preload();
+  }
+
+  function playVideo(v) {
+    v.play().catch(() => {
+      // Autoplay met geluid geblokkeerd: dan zonder geluid proberen
+      v.muted = true;
+      v.play().catch(() => {});
+    });
+  }
+
+  function preload() {
+    const next = media[order[(pos + 1) % order.length]];
+    if (next && next.type === 'image') { const i = new Image(); i.src = urlOf(next); }
+  }
+
+  // Timer die pauzeren en hervatten ondersteunt
+  function scheduleNext(ms) {
+    clearTimer();
+    timerRemaining = ms;
+    timerTotal = ms;
+    $('progress').classList.remove('hidden');
+    if (playing) runTimer();
+    else drawProgress();
+  }
+  function runTimer() {
+    timerStart = performance.now();
+    timer = setTimeout(() => { timer = null; display(1); }, timerRemaining);
+    const tick = () => { drawProgress(); progressRaf = requestAnimationFrame(tick); };
+    tick();
+  }
+  function pauseTimer() {
+    if (!timer) return;
+    clearTimeout(timer); timer = null;
+    cancelAnimationFrame(progressRaf);
+    timerRemaining -= performance.now() - timerStart;
+  }
+  function clearTimer() {
+    clearTimeout(timer); timer = null;
+    cancelAnimationFrame(progressRaf);
+    timerTotal = 0;
+    $('progress').style.width = '0';
+  }
+  function drawProgress() {
+    if (!timerTotal) return;
+    const left = timer ? timerRemaining - (performance.now() - timerStart) : timerRemaining;
+    $('progress').style.width = `${Math.min(100, (1 - left / timerTotal) * 100)}%`;
+  }
+
+  function togglePlay() {
+    playing = !playing;
+    if (playing) {
+      if (timerTotal) runTimer();
+      if (currentVideo) {
+        if (currentVideo.ended) display(1); else playVideo(currentVideo);
+      } else if (!timerTotal) {
+        display(1);
+      }
+    } else {
+      pauseTimer();
+      if (currentVideo) currentVideo.pause();
+    }
+    updateButtons();
+    toast(playing ? 'Afspelen' : 'Pauze');
+  }
+
+  function setSeconds(v) {
+    settings.seconds = clampSeconds(v);
+    $('barSeconds').value = settings.seconds;
+    save();
+    // Nieuwe tijd direct toepassen op de huidige dia
+    if (timerTotal) {
+      const elapsed = timerTotal - (timer ? timerRemaining - (performance.now() - timerStart) : timerRemaining);
+      const wasRunning = !!timer;
+      pauseTimer();
+      clearTimeout(timer);
+      timerTotal = settings.seconds * 1000;
+      timerRemaining = Math.max(0, timerTotal - elapsed);
+      if (wasRunning) runTimer(); else drawProgress();
+    }
+  }
+
+  function toggleMute() {
+    settings.muted = !settings.muted;
+    save();
+    if (currentVideo) currentVideo.muted = settings.muted;
+    updateButtons();
+    toast(settings.muted ? 'Geluid uit' : 'Geluid aan');
+  }
+
+  function toggleShuffle() {
+    settings.shuffle = !settings.shuffle;
+    save();
+    buildOrder(true);
+    $('pos').textContent = `${pos + 1} / ${order.length}`;
+    updateButtons();
+    toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+
+  function updateButtons() {
+    $('playIcon').innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    $('muteIcon').innerHTML = settings.muted ? ICON_MUTE : ICON_SOUND;
+    $('shuffleBtn').classList.toggle('on', settings.shuffle);
+  }
+
+  let toastTimer;
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 900);
+  }
+
+  // Bedieningsbalk tonen bij muisbeweging, daarna weer verbergen
+  let uiTimer;
+  function pokeUI() {
+    show.classList.add('ui');
+    clearTimeout(uiTimer);
+    uiTimer = setTimeout(() => {
+      if (!$('bar').matches(':hover') && document.activeElement !== $('barSeconds')) show.classList.remove('ui');
+    }, 2500);
+  }
+  show.addEventListener('mousemove', pokeUI);
+  show.addEventListener('touchstart', pokeUI, { passive: true });
+  show.addEventListener('click', (e) => {
+    if (e.target.closest('#bar')) return;
+    // Klik links = vorige, rechts = volgende (zoals de Windows-diavoorstelling)
+    if (e.clientX < window.innerWidth / 3) display(-1);
+    else if (e.clientX > window.innerWidth * 2 / 3) display(1);
+    else togglePlay();
+  });
+  show.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar')) toggleFullscreen(); });
+
+  $('startBtn').onclick = start;
+  $('prevBtn').onclick = () => display(-1);
+  $('nextBtn').onclick = () => display(1);
+  $('playBtn').onclick = togglePlay;
+  $('muteBtn').onclick = toggleMute;
+  $('shuffleBtn').onclick = toggleShuffle;
+  $('fsBtn').onclick = toggleFullscreen;
+  $('exitBtn').onclick = stop;
+  $('barSeconds').addEventListener('change', (e) => setSeconds(e.target.value));
+  $('barSeconds').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (!show.classList.contains('active')) {
+      if (e.key === 'Enter' && !$('startBtn').disabled && e.target.tagName !== 'BUTTON') start();
+      return;
+    }
+    switch (e.key) {
+      case ' ': case 'k': e.preventDefault(); togglePlay(); break;
+      case 'ArrowRight': case 'PageDown': display(1); break;
+      case 'ArrowLeft': case 'PageUp': display(-1); break;
+      case 'Home': pos = 0; display(0); break;
+      case 'End': pos = order.length - 1; display(0); break;
+      case '+': case '=': setSeconds(settings.seconds + 1); toast(`${settings.seconds} sec per foto`); break;
+      case '-': case '_': setSeconds(settings.seconds - 1); toast(`${settings.seconds} sec per foto`); break;
+      case 'f': case 'F': toggleFullscreen(); break;
+      case 'm': case 'M': toggleMute(); break;
+      case 's': case 'S': toggleShuffle(); break;
+      case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
+      default: return;
+    }
+    pokeUI();
+  });
+
+  updateButtons();
+})();
+</script>
+</body>
+</html>
