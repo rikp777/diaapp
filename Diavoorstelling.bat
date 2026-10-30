@@ -247,6 +247,11 @@ try {
     if ($a.Rel.Length -ne $b.Rel.Length) { return $a.Rel.Length -lt $b.Rel.Length }
     return [string]::CompareOrdinal($a.Rel, $b.Rel) -lt 0
   }
+  $sha = [Security.Cryptography.SHA256]::Create()
+  function Vingerafdruk($vol) {
+    $fs = [IO.File]::OpenRead($vol)
+    try { return [BitConverter]::ToString($sha.ComputeHash($fs)) } finally { $fs.Close() }
+  }
   $perGrootte = @{}
   foreach ($f in $gevonden) {
     $k = [string]$f.Grootte
@@ -261,7 +266,9 @@ try {
     $perInhoud = @{}
     foreach ($f in $groep) {
       $h = $null
-      try { $h = (Get-FileHash -LiteralPath $f.Vol -Algorithm SHA256).Hash } catch { $h = $null }
+      try { $h = Vingerafdruk $f.Vol } catch {
+        if ($env:DIA_GEEN_BROWSER) { [Console]::Error.WriteLine("VERGELIJKEN MISLUKT: $($f.Rel): $($_.Exception.Message)") }
+      }
       if (-not $h) { continue }
       if (-not $perInhoud.ContainsKey($h)) { $perInhoud[$h] = New-Object System.Collections.Generic.List[object] }
       $perInhoud[$h].Add($f)
@@ -273,6 +280,7 @@ try {
       foreach ($f in $zelfde) { if ($f.Rel -ne $beste.Rel) { $weg[$f.Rel] = $true; $dubbel++ } }
     }
   }
+  if ($env:DIA_GEEN_BROWSER) { [Console]::Error.WriteLine("DUBBELEN: $($gevonden.Count) bestanden, $($perGrootte.Count) groottes, $dubbel dubbel") }
   $gevonden = @($gevonden | Where-Object { -not $weg.ContainsKey($_.Rel) })
   $paden = @($gevonden | ForEach-Object { $_.Rel })
   $tijden = @($gevonden | ForEach-Object { $_.Tijd })

@@ -15,6 +15,7 @@ const APP_DIR = path.join(process.env.LOCALAPPDATA || '', 'Diavoorstelling');
 const OUDE_DATUM = new Date('2020-05-01T10:00:00Z');
 
 let photos, child, lijst;
+let uitvoer = ''; // wat het startbestand meldt (in testmodus)
 
 /** JPG maken met de browser zelf (op de Windows-runner is geen ffmpeg nodig). */
 async function makeJpeg(page, w, h, color) {
@@ -56,7 +57,6 @@ test.beforeAll(async ({ browser }) => {
     cwd: photos, env: { ...process.env, DIA_GEEN_BROWSER: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
   // Uitvoer van het startbestand bewaren (in testmodus komen meldingen hier i.p.v. in een venster)
-  let uitvoer = '';
   child.stdout.on('data', (d) => { uitvoer += d; });
   child.stderr.on('data', (d) => { uitvoer += d; });
   try {
@@ -98,6 +98,7 @@ async function openAt(page, name) {
 }
 
 test('the launcher scans the folder and writes the list with the helper', async () => {
+  console.log(`Uitvoer van Diavoorstelling.bat:\n${uitvoer}`);
   expect(lijst).toContain('"sub map/strand.jpg"');
   expect(lijst).toContain('"tuin.jpg"');
   expect(lijst).not.toContain('Diavoorstelling.bat');
