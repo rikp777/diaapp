@@ -1,0 +1,2 @@
+# Windows-startbestand met CRLF opslaan, ook voor rauwe downloads
+*.bat -text

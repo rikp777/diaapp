@@ -1,0 +1,49 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Downloadpagina in de hoofdmap, de app zelf onder /app/,
+      # en Diavoorstelling.bat met de app erin als download
+      - name: Build site
+        run: |
+          node scripts/maak-download.js
+          mkdir -p _site/app
+          cp site/index.html _site/index.html
+          cp index.html _site/app/index.html
+          cp dist/Diavoorstelling.bat _site/Diavoorstelling.bat
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

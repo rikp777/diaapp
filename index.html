@@ -62,8 +62,8 @@
     padding: 9px 16px; cursor: pointer; transition: background .15s;
   }
   .btn:hover { background: #3f3f46; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.primary { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+  .btn.primary:hover { background: #1d4ed8; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
   #count { margin-top: 12px; min-height: 1.4em; color: var(--text); }
   .settings { display: grid; gap: 14px; margin: 22px 0; }
@@ -85,11 +85,12 @@
 
   /* ---------- Voorstelling ---------- */
   #show { position: fixed; inset: 0; display: none; cursor: none; }
+  #show:focus { outline: none; }
   #show.active { display: block; }
   #show.ui { cursor: default; }
   .slide {
     position: absolute; inset: 0;
-    display: grid; place-items: center;
+    display: grid; place-items: center; overflow: hidden;
     opacity: 0; transition: opacity var(--fade) ease;
   }
   .slide.visible { opacity: 1; }
@@ -99,6 +100,15 @@
     object-fit: contain;
   }
   .fill .slide img, .fill .slide video { object-fit: cover; }
+
+  /* Ken Burns: langzaam inzoomen en schuiven, duur = tijd per foto */
+  @keyframes kenburns {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(var(--kb-x, 0), var(--kb-y, 0)) scale(1.12); }
+  }
+  .slide img.kb { animation: kenburns var(--kb-dur, 6s) linear forwards; will-change: transform; }
+  #show.paused .slide img.kb { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { .slide img.kb { animation: none; } }
 
   #bar {
     position: absolute; left: 50%; bottom: 24px; transform: translate(-50%, 12px);
@@ -117,6 +127,8 @@
   }
   .icon:hover { background: rgba(255, 255, 255, 0.1); }
   .icon.on { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #volume { width: 84px; accent-color: var(--accent); margin: 0 4px; }
   .icon svg { width: 22px; height: 22px; fill: currentColor; }
   .sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
   #bar .num input { width: 58px; padding: 5px 6px; }
@@ -146,6 +158,40 @@
   }
   #toast.show { opacity: 1; }
 
+  /* ---------- Overzicht (miniaturen) ---------- */
+  #grid {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; flex-direction: column;
+    background: rgba(9, 9, 11, 0.94);
+    cursor: default;
+  }
+  #grid[hidden] { display: none; }
+  .grid-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+  }
+  .grid-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+  #gridItems {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding: 16px;
+    display: grid; gap: 8px; align-content: start; grid-auto-rows: min-content;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
+  .thumb {
+    position: relative; min-width: 0; aspect-ratio: 4 / 3; padding: 0;
+    background: #18181b; border: 2px solid transparent; border-radius: 8px;
+    overflow: hidden; cursor: pointer; display: grid; place-items: center;
+  }
+  .thumb:hover { border-color: var(--border); }
+  .thumb.current { border-color: var(--accent); }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .thumb svg { width: 32px; height: 32px; fill: var(--muted); }
+  .thumb .cap {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 6px;
+    font-size: 11px; text-align: left; background: rgba(0, 0, 0, 0.6);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
   @media (max-width: 520px) {
     .card { padding: 20px; }
     #bar { bottom: 12px; }
@@ -164,13 +210,13 @@
     <div id="drop">
       Sleep foto's, filmpjes of een map hierheen
       <div class="pick-row">
-        <button class="btn" id="pickFiles">Bestanden kiezen…</button>
-        <button class="btn" id="pickFolder">Map kiezen…</button>
+        <button class="btn" id="pickFiles" type="button">Bestanden kiezen…</button>
+        <button class="btn" id="pickFolder" type="button">Map kiezen…</button>
       </div>
-      <div id="count"></div>
+      <div id="count" aria-live="polite"></div>
     </div>
-    <input type="file" id="fileInput" multiple accept="image/*,video/*" hidden>
-    <input type="file" id="folderInput" webkitdirectory multiple hidden>
+    <input type="file" id="fileInput" multiple accept="image/*,video/*,.heic,.heif,.tif,.tiff" hidden aria-label="Bestanden kiezen">
+    <input type="file" id="folderInput" webkitdirectory multiple hidden aria-label="Map kiezen">
 
     <div class="settings">
       <div class="setting">
@@ -202,114 +248,286 @@
         <label for="fill">Scherm vullen (bijsnijden)</label>
         <input type="checkbox" id="fill">
       </div>
+      <div class="setting">
+        <label for="kenburns">Ken Burns-effect (langzaam inzoomen en schuiven)
+          <small>Alleen voor foto's; uit als je systeem minder beweging vraagt</small>
+        </label>
+        <input type="checkbox" id="kenburns">
+      </div>
     </div>
 
     <div class="pick-row">
-      <button class="btn primary" id="startBtn" disabled>Diavoorstelling starten</button>
+      <button class="btn primary" id="startBtn" type="button" disabled>Diavoorstelling starten</button>
     </div>
 
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>Esc</kbd> stoppen
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> stoppen
     </div>
   </div>
 </section>
 
 <!-- Voorstelling -->
-<section id="show">
+<section id="show" tabindex="-1" aria-label="Diavoorstelling">
   <div class="slide" id="slideA"></div>
   <div class="slide" id="slideB"></div>
 
   <div id="info"><span id="name"></span></div>
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
   <div id="progress"></div>
 
   <div id="bar">
-    <button class="icon" id="prevBtn" title="Vorige (←)">
-      <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+    <button class="icon" id="prevBtn" type="button" title="Vorige (←)" aria-label="Vorige">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
     </button>
-    <button class="icon" id="playBtn" title="Afspelen/pauze (spatie)">
-      <svg viewBox="0 0 24 24" id="playIcon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+    <button class="icon" id="playBtn" type="button" title="Afspelen/pauze (spatie)" aria-label="Pauze">
+      <svg viewBox="0 0 24 24" id="playIcon" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
     </button>
-    <button class="icon" id="nextBtn" title="Volgende (→)">
-      <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+    <button class="icon" id="nextBtn" type="button" title="Volgende (→)" aria-label="Volgende">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
     </button>
     <div class="sep"></div>
     <div class="num" title="Seconden per foto">
-      <input type="number" id="barSeconds" min="1" max="3600" step="1"><span>sec</span>
+      <input type="number" id="barSeconds" min="1" max="3600" step="1" aria-label="Seconden per foto"><span aria-hidden="true">sec</span>
     </div>
     <div class="sep"></div>
-    <button class="icon" id="shuffleBtn" title="Willekeurig">
-      <svg viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
     </button>
-    <button class="icon" id="muteBtn" title="Geluid (M)">
-      <svg viewBox="0 0 24 24" id="muteIcon"></svg>
+    <button class="icon" id="muteBtn" type="button" title="Geluid (M)" aria-label="Geluid uit">
+      <svg viewBox="0 0 24 24" id="muteIcon" aria-hidden="true"></svg>
     </button>
-    <button class="icon" id="fsBtn" title="Volledig scherm (F)">
-      <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+    <input type="range" id="volume" min="0" max="1" step="0.05" aria-label="Volume" title="Volume">
+    <button class="icon" id="gridBtn" type="button" title="Overzicht (G)" aria-label="Overzicht">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg>
     </button>
-    <span id="pos"></span>
-    <button class="icon" id="exitBtn" title="Stoppen (Esc)">
-      <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    <button class="icon" id="fsBtn" type="button" title="Volledig scherm (F)" aria-label="Volledig scherm">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
     </button>
+    <span id="pos" aria-live="off"></span>
+    <button class="icon" id="exitBtn" type="button" title="Stoppen (Esc)" aria-label="Stoppen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+  </div>
+
+  <div id="grid" role="dialog" aria-modal="true" aria-labelledby="gridTitle" hidden>
+    <div class="grid-head">
+      <h2 id="gridTitle">Overzicht</h2>
+      <button class="icon" id="gridClose" type="button" title="Sluiten (Esc)" aria-label="Overzicht sluiten">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div id="gridItems"></div>
   </div>
 </section>
 
+<!-- Lijst met bestanden, geschreven door Diavoorstelling.bat (mag ontbreken) -->
+<script src="diashow-lijst.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|avif|svg|ico|jfif|heic|heif)$/i;
+  const IMAGE_EXT = /\.(jpe?g|png|apng|gif|webp|bmp|avif|svg|ico|jfif|heic|heif|tiff?)$/i;
   const VIDEO_EXT = /\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi|3gp)$/i;
+  // Formaten die zonder controle worden geaccepteerd
+  const SAFE_IMG_EXT = new Set(['jpg', 'jpeg', 'jfif', 'png', 'apng', 'gif', 'webp', 'bmp', 'avif', 'svg']);
+  const SAFE_IMG_MIME = /^image\/(jpeg|pjpeg|png|apng|gif|webp|bmp|x-ms-bmp|avif|svg\+xml)$/i;
+  // Formaten die vaak niet werken: eerst proberen te decoderen
+  const RISKY_IMG_EXT = new Set(['heic', 'heif', 'tif', 'tiff']);
+  // canPlayType geeft hier vaak '' terwijl het filmpje (H.264) wel speelt: dan pas bij afspelen beoordelen
+  const LENIENT_VIDEO_MIME = new Set(['video/quicktime', 'video/x-matroska']);
+  const WINDOW = 3;          // object-URL's bewaren voor posities pos-3 .. pos+3
+  const FADE = 800;          // ms, gelijk aan --fade
+  const VIDEO_TIMEOUT = 15000; // ms, filmpje dat niet laadt wordt overgeslagen
+
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
   const ICON_PAUSE = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
   const ICON_SOUND = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
   const ICON_MUTE = '<path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>';
+  const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, volume: 1 };
   const settings = { ...defaults };
-  try { Object.assign(settings, JSON.parse(localStorage.getItem('diashow-settings') || '{}')); } catch {}
+  const clampSeconds = (v) => {
+    const n = v === '' || v === null ? NaN : Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(3600, Math.max(1, n)) : defaults.seconds;
+  };
+  const clampVolume = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : defaults.volume; };
+  try {
+    const raw = JSON.parse(localStorage.getItem('diashow-settings') || '{}');
+    if (raw && typeof raw === 'object') {
+      for (const k of Object.keys(defaults)) {
+        if (typeof raw[k] === typeof defaults[k]) settings[k] = raw[k];
+      }
+    }
+  } catch {}
+  settings.seconds = clampSeconds(settings.seconds);
+  settings.volume = clampVolume(settings.volume);
+  if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  $('seconds').value = settings.seconds;
-  $('videoMode').value = settings.videoMode;
-  $('muted').checked = settings.muted;
-  $('shuffle').checked = settings.shuffle;
-  $('loop').checked = settings.loop;
-  $('fill').checked = settings.fill;
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns'];
+  function syncStartControls() {
+    $('seconds').value = settings.seconds;
+    $('videoMode').value = settings.videoMode;
+    for (const k of CHECKS) $(k).checked = settings[k];
+  }
+  syncStartControls();
+  $('volume').value = settings.volume;
 
-  const clampSeconds = (v) => Math.min(3600, Math.max(1, Number(v) || defaults.seconds));
   $('seconds').addEventListener('change', (e) => { settings.seconds = clampSeconds(e.target.value); e.target.value = settings.seconds; save(); });
-  $('videoMode').addEventListener('change', (e) => { settings.videoMode = e.target.value; save(); });
-  for (const k of ['muted', 'shuffle', 'loop', 'fill']) {
+  $('videoMode').addEventListener('change', (e) => { settings.videoMode = e.target.value === 'interval' ? 'interval' : 'full'; save(); });
+  for (const k of CHECKS) {
     $(k).addEventListener('change', (e) => { settings[k] = e.target.checked; save(); });
   }
 
+  const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+
   // ---------- Bestanden kiezen ----------
-  let media = []; // { file, type: 'image' | 'video', url? }
+  // { path, type: 'image' | 'video', file? (gekozen bestand) | src? (relatieve URL uit de lijst), bad? }
+  let media = [];
+  let source = 'bestanden'; // 'lijst' = diashow-lijst.js van de Windows-starter, 'bestanden' = zelf gekozen
+  let loadSkipped = 0;
+  let loadGen = 0;
 
   const kindOf = (file) => {
     if (file.type.startsWith('image/') || IMAGE_EXT.test(file.name)) return 'image';
     if (file.type.startsWith('video/') || VIDEO_EXT.test(file.name)) return 'video';
     return null;
   };
-  const pathOf = (f) => f.webkitRelativePath || f._path || f.name;
+  const pathOf = (f) => (f.webkitRelativePath || f._path || f.name).replace(/^\//, '');
+  const nameOf = (m) => m.path;
+  const baseName = (m) => m.path.split('/').pop();
+  const encodePath = (p) => p.split('/').map(encodeURIComponent).join('/');
+  const extOf = (name) => { const r = /\.([^./\\]+)$/.exec(name); return r ? r[1].toLowerCase() : ''; };
   const collator = new Intl.Collator('nl', { numeric: true, sensitivity: 'base' });
+  const probeVideoEl = document.createElement('video');
 
-  function setFiles(files) {
-    for (const m of media) if (m.url) URL.revokeObjectURL(m.url);
-    media = [...files]
-      .map((file) => ({ file, type: kindOf(file) }))
-      .filter((m) => m.type)
-      .sort((a, b) => collator.compare(pathOf(a.file), pathOf(b.file)));
-    const photos = media.filter((m) => m.type === 'image').length;
-    const videos = media.length - photos;
-    $('count').textContent = media.length
-      ? `${photos} foto${photos === 1 ? '' : "'s"} en ${videos} filmpje${videos === 1 ? '' : 's'} geselecteerd`
-      : 'Geen foto\'s of filmpjes gevonden.';
-    $('startBtn').disabled = !media.length;
+  function withTimeout(promise, ms, fallback) {
+    return Promise.race([promise, new Promise((res) => setTimeout(() => res(fallback), ms))]);
+  }
+
+  // Kan de browser dit plaatje decoderen? (alleen voor riskante formaten)
+  async function probeImage(file) {
+    if (typeof createImageBitmap === 'function') {
+      try { const b = await createImageBitmap(file); if (b.close) b.close(); return true; } catch {}
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return true;
+    } catch { return false; } finally { URL.revokeObjectURL(url); }
+  }
+
+  async function filterSupported(list, gen) {
+    const ok = new Array(list.length).fill(true);
+    const goodKeys = new Set();
+    const failCount = new Map();
+    const queue = [];
+    list.forEach((m, i) => {
+      const f = m.file;
+      if (!f) return;
+      if (m.type === 'video') {
+        const t = f.type;
+        if (t && !LENIENT_VIDEO_MIME.has(t.toLowerCase()) && probeVideoEl.canPlayType(t) === '') ok[i] = false;
+        return;
+      }
+      const ext = extOf(f.name);
+      const risky = RISKY_IMG_EXT.has(ext) || (!SAFE_IMG_EXT.has(ext) && !SAFE_IMG_MIME.test(f.type));
+      if (risky) queue.push(i);
+    });
+    let next = 0;
+    const worker = async () => {
+      while (next < queue.length) {
+        if (gen !== loadGen) return;
+        const i = queue[next++];
+        const f = list[i].file;
+        const key = extOf(f.name) || f.type || '?';
+        if (goodKeys.has(key)) continue;                       // dit formaat werkt al
+        if ((failCount.get(key) || 0) >= 3) { ok[i] = false; continue; } // formaat werkt duidelijk niet
+        const good = await withTimeout(probeImage(f), 8000, true);
+        if (good) goodKeys.add(key);
+        else { ok[i] = false; failCount.set(key, (failCount.get(key) || 0) + 1); }
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    return list.filter((_, i) => ok[i]);
+  }
+
+  function updateCount() {
+    const usable = media.filter((m) => !m.bad);
+    const photos = usable.filter((m) => m.type === 'image').length;
+    const videos = usable.length - photos;
+    const skipped = loadSkipped + (media.length - usable.length);
+    let text = usable.length
+      ? `${photos} foto${photos === 1 ? '' : "'s"} en ${videos} filmpje${videos === 1 ? '' : 's'} ${source === 'lijst' ? 'uit deze map' : 'geselecteerd'}`
+      : 'Geen foto\'s of filmpjes gevonden';
+    if (skipped) text += ` · ${skipped} bestand${skipped === 1 ? '' : 'en'} overgeslagen (niet ondersteund)`;
+    else if (!usable.length) text += '.';
+    $('count').textContent = text;
+    $('startBtn').disabled = !usable.length;
+  }
+
+  async function setFiles(files) {
+    const gen = ++loadGen;
+    revokeAllSlideUrls();
+    media = [];
+    source = 'bestanden';
+    const list = [...files].map((file) => ({ file, path: pathOf(file), type: kindOf(file) })).filter((m) => m.type);
+    $('startBtn').disabled = true;
+    if (list.length) $('count').textContent = 'Bestanden controleren…';
+    const ok = await filterSupported(list, gen);
+    if (gen !== loadGen) return;
+    loadSkipped = list.length - ok.length;
+    media = ok.sort((a, b) => collator.compare(a.path, b.path));
+    updateCount();
+  }
+
+  // ---------- Lijst uit diashow-lijst.js (Windows-starter) ----------
+  const VIDEO_MIME_BY_EXT = { mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', ogg: 'video/ogg', avi: 'video/x-msvideo', '3gp': 'video/3gpp' };
+  function probeUrl(src) {
+    const img = new Image();
+    img.src = src;
+    return img.decode().then(() => true, () => false);
+  }
+  // Map met de foto's als file:-adres (Windows-starter); anders relatief t.o.v. index.html
+  const listBase = typeof window.DIASHOW_BASE === 'string' && window.DIASHOW_BASE
+    ? window.DIASHOW_BASE.replace(/\/?$/, '/') : '';
+  async function setList(paths) {
+    const gen = ++loadGen;
+    revokeAllSlideUrls();
+    source = 'lijst';
+    const all = paths.filter((p) => typeof p === 'string' && p.trim())
+      .map((p) => p.replace(/\\/g, '/').replace(/^\.?\//, ''));
+    const list = [];
+    let unknown = 0;
+    for (const p of all) {
+      const type = IMAGE_EXT.test(p) ? 'image' : VIDEO_EXT.test(p) ? 'video' : null;
+      if (type) list.push({ path: p, src: listBase + encodePath(p), type }); else unknown++;
+    }
+    // Riskante beeldformaten: per extensie één keer proberen (bv. HEIC werkt in Safari wel)
+    const extOk = new Map();
+    for (const m of list) {
+      const ext = extOf(m.path);
+      if (m.type !== 'image' || !RISKY_IMG_EXT.has(ext) || extOk.has(ext)) continue;
+      extOk.set(ext, await withTimeout(probeUrl(m.src), 5000, false));
+      if (gen !== loadGen) return false;
+    }
+    const ok = list.filter((m) => {
+      const ext = extOf(m.path);
+      if (m.type === 'image') return extOk.get(ext) !== false;
+      const t = VIDEO_MIME_BY_EXT[ext];
+      return !t || probeVideoEl.canPlayType(t) !== '';
+    });
+    loadSkipped = list.length - ok.length + unknown;
+    media = ok.sort((a, b) => collator.compare(a.path, b.path));
+    updateCount();
+    return media.length > 0;
   }
 
   $('pickFiles').onclick = () => $('fileInput').click();
@@ -353,11 +571,17 @@
 
   // ---------- Voorstelling ----------
   const show = $('show');
+  const bar = $('bar');
   const slides = [$('slideA'), $('slideB')];
+  const layerIdx = [-1, -1];  // welk media-item staat in welke laag
   let front = 0;
   let order = [];
   let pos = 0;
   let playing = true;
+  let loading = false;        // display() wacht op het laden van een bestand
+  let loadingIdx = -1;
+  let atEnd = false;          // einde bereikt zonder herhalen
+  let shownIdx = -1;
   let timer = null;
   let timerStart = 0;
   let timerRemaining = 0;
@@ -365,127 +589,297 @@
   let progressRaf = null;
   let currentVideo = null;
   let token = 0;
+  let preloadImg = null;
 
-  const urlOf = (m) => (m.url ||= URL.createObjectURL(m.file));
+  // Object-URL's voor dia's (los van die van de miniaturen)
+  const slideUrls = new Map(); // media-index -> url
+  // Weergave-URL: relatieve URL uit de lijst (nooit intrekken) of een eigen object-URL
+  function urlOf(idx) {
+    const m = media[idx];
+    if (m.src) return m.src;
+    let u = slideUrls.get(idx);
+    if (!u) { u = URL.createObjectURL(m.file); slideUrls.set(idx, u); }
+    return u;
+  }
+  function revokeAllSlideUrls() {
+    for (const u of slideUrls.values()) URL.revokeObjectURL(u);
+    slideUrls.clear();
+  }
+  function pruneUrls() {
+    const n = order.length;
+    const keep = new Set();
+    if (n) for (let k = -WINDOW; k <= WINDOW; k++) keep.add(order[(((pos + k) % n) + n) % n]);
+    for (const i of layerIdx) if (i >= 0) keep.add(i);
+    if (loadingIdx >= 0) keep.add(loadingIdx);
+    for (const [i, u] of slideUrls) {
+      if (!keep.has(i)) { URL.revokeObjectURL(u); slideUrls.delete(i); }
+    }
+  }
 
+  function disposeVideo(v) {
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch {}
+  }
+  function clearLayer(i) {
+    const s = slides[i];
+    const v = s.querySelector('video');
+    if (v) disposeVideo(v);
+    s.innerHTML = '';
+    layerIdx[i] = -1;
+  }
+
+  function shuffleArray(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+  }
   function buildOrder(keepCurrent) {
     const current = order[pos];
-    order = media.map((_, i) => i);
-    if (settings.shuffle) {
-      for (let i = order.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [order[i], order[j]] = [order[j], order[i]];
-      }
-    }
+    order = media.map((_, i) => i).filter((i) => !media[i].bad);
+    if (settings.shuffle) shuffleArray(order);
+    pos = 0;
     if (keepCurrent && current !== undefined) {
       const at = order.indexOf(current);
-      [order[0], order[at]] = [order[at], order[0]];
-      pos = 0;
+      if (at < 0) return;
+      if (settings.shuffle) { [order[0], order[at]] = [order[at], order[0]]; pos = 0; }
+      else pos = at; // gesorteerde volgorde intact laten
     }
   }
 
   function start() {
     buildOrder(false);
+    if (!order.length) return;
     pos = 0;
     playing = true;
+    atEnd = false;
+    shownIdx = -1;
     $('start').classList.add('hidden');
     show.classList.add('active');
     show.classList.toggle('fill', settings.fill);
     $('barSeconds').value = settings.seconds;
+    $('volume').value = settings.volume;
     updateButtons();
     display(0);
     pokeUI();
+    show.focus({ preventScroll: true });
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
 
   function stop() {
     clearTimer();
     token++;
-    for (const s of slides) { s.classList.remove('visible'); s.innerHTML = ''; }
+    clearTimeout(clickTimer);
+    closeGrid(null, false);
+    loading = false;
+    loadingIdx = -1;
+    for (let i = 0; i < slides.length; i++) { slides[i].classList.remove('visible'); clearLayer(i); }
     currentVideo = null;
-    show.classList.remove('active', 'ui');
+    preloadImg = null;
+    revokeAllSlideUrls();
+    show.classList.remove('active', 'ui', 'paused');
     $('start').classList.remove('hidden');
-    $('seconds').value = settings.seconds;
-    $('shuffle').checked = settings.shuffle;
-    $('muted').checked = settings.muted;
+    syncStartControls();
+    updateCount();
+    if (!$('startBtn').disabled) $('startBtn').focus({ preventScroll: true });
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
+  function kenBurnsOn() { return settings.kenburns && !reducedMotion.matches; }
+  function applyKenBurns(img) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 4.5; // %, binnen de 6% die inzoomen tot 1.12 aan elke kant oplevert
+    img.style.setProperty('--kb-x', `${(Math.cos(angle) * r).toFixed(2)}%`);
+    img.style.setProperty('--kb-y', `${(Math.sin(angle) * r).toFixed(2)}%`);
+    img.style.setProperty('--kb-dur', `${settings.seconds * 1000 + FADE}ms`);
+    img.classList.add('kb');
+  }
+
+  // Laadt een dia; geeft het element terug, of null als het niet te tonen is
+  async function loadElement(m, idx) {
+    if (m.type === 'image') {
+      const el = new Image();
+      el.decoding = 'async';
+      el.alt = '';
+      el.src = urlOf(idx);
+      try { await el.decode(); return el; } catch {}
+      if (!el.complete) await new Promise((res) => { el.onload = el.onerror = res; });
+      return el.complete && el.naturalWidth > 0 ? el : null;
+    }
+    const el = document.createElement('video');
+    el.playsInline = true;
+    el.muted = settings.muted;
+    el.volume = settings.volume;
+    el.loop = settings.videoMode === 'interval';
+    el.preload = 'auto';
+    const ok = await new Promise((res) => {
+      let done = false;
+      let metaTimer = 0;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        clearTimeout(t); clearTimeout(metaTimer);
+        el.removeEventListener('loadeddata', onData);
+        el.removeEventListener('loadedmetadata', onMeta);
+        el.removeEventListener('error', onErr);
+        res(v);
+      };
+      const onData = () => finish(true);
+      const onErr = () => finish(false);
+      // Sommige browsers laden niet verder dan de metadata zonder play(); dan na korte tijd toch tonen
+      const onMeta = () => { metaTimer = setTimeout(() => finish(!el.error), 3000); };
+      const t = setTimeout(() => finish(false), VIDEO_TIMEOUT);
+      el.addEventListener('loadeddata', onData);
+      el.addEventListener('loadedmetadata', onMeta);
+      el.addEventListener('error', onErr);
+      el.src = urlOf(idx);
+      if (el.readyState >= 2) finish(true);
+    });
+    if (ok && !el.error) return el;
+    disposeVideo(el);
+    return null;
+  }
+
+  // Item op positie p kan niet getoond worden: uit de lijst halen
+  function markBad(p) {
+    const idx = order[p];
+    const m = media[idx];
+    m.bad = true;
+    order.splice(p, 1);
+    const u = slideUrls.get(idx);
+    if (u && !layerIdx.includes(idx)) { URL.revokeObjectURL(u); slideUrls.delete(idx); }
+    toast(`Kan ${baseName(m)} niet tonen — overgeslagen`, 2500);
+  }
+
+  function endReached() {
+    loading = false;
+    loadingIdx = -1;
+    atEnd = true;
+    playing = false;
+    const at = order.indexOf(shownIdx);
+    pos = at >= 0 ? at : Math.max(0, order.length - 1);
+    if (currentVideo) currentVideo.pause();
+    updateButtons();
+    toast('Einde');
+  }
+
   async function display(step) {
+    if (!order.length) return;
+    // Vorige op de eerste dia zonder herhalen: niets doen (niet opnieuw laden)
+    if (step < 0 && pos === 0 && !settings.loop) return;
     const my = ++token;
     clearTimer();
+    clearTimeout(clickTimer);
+    loading = true;
     if (step) {
       let next = pos + step;
       if (next >= order.length) {
-        if (!settings.loop) { playing = false; updateButtons(); toast('Einde'); return; }
-        if (settings.shuffle) buildOrder(false);
+        if (!settings.loop) { endReached(); return; }
+        if (settings.shuffle && order.length > 1) {
+          const last = order[pos];
+          buildOrder(false);
+          if (order[0] === last) [order[0], order[order.length - 1]] = [order[order.length - 1], order[0]];
+        }
         next = 0;
       } else if (next < 0) {
         next = settings.loop ? order.length - 1 : 0;
       }
       pos = next;
     }
-
-    const m = media[order[pos]];
-    const back = slides[1 - front];
-    back.innerHTML = '';
+    pos = Math.min(Math.max(0, pos), order.length - 1);
+    atEnd = false;
+    // Het vorige filmpje stilzetten zodra we verder gaan
+    if (currentVideo) { currentVideo.pause(); currentVideo = null; }
 
     let el;
-    if (m.type === 'image') {
-      el = new Image();
-      el.decoding = 'async';
-      el.src = urlOf(m);
-      try { await el.decode(); } catch {}
-    } else {
-      el = document.createElement('video');
-      el.src = urlOf(m);
-      el.playsInline = true;
-      el.muted = settings.muted;
-      el.preload = 'auto';
-      await new Promise((res) => {
-        el.addEventListener('loadeddata', res, { once: true });
-        el.addEventListener('error', res, { once: true });
-      });
+    for (;;) {
+      const idx = order[pos];
+      loadingIdx = idx;
+      el = await loadElement(media[idx], idx);
+      if (my !== token) { if (el && el.tagName === 'VIDEO') disposeVideo(el); return; }
+      if (el) break;
+      markBad(pos);
+      if (!order.length) { stop(); return; }
+      if (step < 0) {
+        pos--;
+        if (pos < 0) pos = settings.loop ? order.length - 1 : 0;
+      } else if (pos >= order.length) {
+        if (!settings.loop) { endReached(); return; }
+        pos = 0;
+      }
     }
-    if (my !== token) return;
+    loading = false;
+    loadingIdx = -1;
 
-    back.appendChild(el);
+    const idx = order[pos];
+    const m = media[idx];
+    const back = 1 - front;
+    clearLayer(back);
+    if (m.type === 'image' && kenBurnsOn()) applyKenBurns(el);
+    slides[back].appendChild(el);
+    layerIdx[back] = idx;
     // Kruislings vervagen tussen de twee lagen
-    back.classList.add('visible');
+    slides[back].classList.add('visible');
     slides[front].classList.remove('visible');
-    const old = slides[front];
-    const oldVideo = old.querySelector('video');
-    if (oldVideo) oldVideo.pause();
-    setTimeout(() => { if (my === token) old.innerHTML = ''; }, 900);
-    front = 1 - front;
+    const oldLayer = front;
+    front = back;
+    shownIdx = idx;
+    setTimeout(() => {
+      if (!slides[oldLayer].classList.contains('visible')) { clearLayer(oldLayer); pruneUrls(); }
+    }, FADE + 100);
 
     currentVideo = m.type === 'video' ? el : null;
-    $('name').textContent = pathOf(m.file).replace(/^\//, '');
+    $('name').textContent = nameOf(m);
     $('pos').textContent = `${pos + 1} / ${order.length}`;
 
     if (currentVideo) {
-      if (el.error) { toast('Filmpje kan niet worden afgespeeld'); scheduleNext(settings.seconds * 1000); return; }
-      currentVideo.addEventListener('ended', () => { if (my === token && playing) display(1); });
-      if (playing) playVideo(currentVideo);
+      const v = currentVideo;
+      v.addEventListener('ended', () => { if (my === token && playing && !v.loop) display(1); });
+      v.addEventListener('error', () => { if (my === token) skipCurrent(); });
+      v.addEventListener('volumechange', () => { if (v === currentVideo) updateButtons(); });
       if (settings.videoMode === 'interval') scheduleNext(settings.seconds * 1000);
-      else { $('progress').classList.add('hidden'); }
+      else $('progress').classList.add('hidden');
+      if (playing) playVideo(v, my);
     } else {
       scheduleNext(settings.seconds * 1000);
     }
+    updateButtons();
     preload();
+    pruneUrls();
   }
 
-  function playVideo(v) {
-    v.play().catch(() => {
+  // Huidig filmpje faalt tijdens afspelen: overslaan
+  function skipCurrent() {
+    const p = order.indexOf(shownIdx);
+    if (p < 0) return;
+    markBad(p);
+    if (currentVideo) { currentVideo.pause(); currentVideo = null; }
+    if (!order.length) { stop(); return; }
+    pos = p - 1;
+    display(1);
+  }
+
+  function playVideo(v, my) {
+    v.play().catch((err) => {
+      if (my !== token || v !== currentVideo) return;
+      if (err && err.name === 'AbortError') return; // pauze tijdens starten
+      if (err && err.name === 'NotSupportedError') { skipCurrent(); return; }
       // Autoplay met geluid geblokkeerd: dan zonder geluid proberen
       v.muted = true;
-      v.play().catch(() => {});
+      updateButtons();
+      v.play().catch((err2) => {
+        if (err2 && err2.name === 'AbortError') return;
+        // Ook zonder geluid geen afspelen: niet blijven hangen, na de fototijd door
+        if (my === token && v === currentVideo && !timerTotal) scheduleNext(settings.seconds * 1000);
+      });
     });
   }
 
   function preload() {
-    const next = media[order[(pos + 1) % order.length]];
-    if (next && next.type === 'image') { const i = new Image(); i.src = urlOf(next); }
+    if (order.length < 2) return;
+    const idx = order[(pos + 1) % order.length];
+    const next = media[idx];
+    preloadImg = null;
+    if (next && next.type === 'image') { const i = new Image(); i.decoding = 'async'; i.src = urlOf(idx); preloadImg = i; }
   }
 
   // Timer die pauzeren en hervatten ondersteunt
@@ -498,8 +892,10 @@
     else drawProgress();
   }
   function runTimer() {
+    clearTimeout(timer);
+    cancelAnimationFrame(progressRaf);
     timerStart = performance.now();
-    timer = setTimeout(() => { timer = null; display(1); }, timerRemaining);
+    timer = setTimeout(() => { timer = null; cancelAnimationFrame(progressRaf); display(1); }, Math.max(0, timerRemaining));
     const tick = () => { drawProgress(); progressRaf = requestAnimationFrame(tick); };
     tick();
   }
@@ -508,6 +904,7 @@
     clearTimeout(timer); timer = null;
     cancelAnimationFrame(progressRaf);
     timerRemaining -= performance.now() - timerStart;
+    drawProgress();
   }
   function clearTimer() {
     clearTimeout(timer); timer = null;
@@ -518,23 +915,36 @@
   function drawProgress() {
     if (!timerTotal) return;
     const left = timer ? timerRemaining - (performance.now() - timerStart) : timerRemaining;
-    $('progress').style.width = `${Math.min(100, (1 - left / timerTotal) * 100)}%`;
+    $('progress').style.width = `${Math.min(100, Math.max(0, (1 - left / timerTotal) * 100))}%`;
   }
 
-  function togglePlay() {
-    playing = !playing;
-    if (playing) {
-      if (timerTotal) runTimer();
+  function pausePlayback() {
+    playing = false;
+    pauseTimer();
+    if (currentVideo) currentVideo.pause();
+    updateButtons();
+  }
+  function resumePlayback() {
+    playing = true;
+    if (loading) {
+      // display() is nog bezig en start zelf de timer / het filmpje
+    } else if (atEnd) {
+      atEnd = false;
+      pos = 0;
+      display(0);
+    } else {
+      if (timerTotal && !timer) runTimer();
       if (currentVideo) {
-        if (currentVideo.ended) display(1); else playVideo(currentVideo);
+        if (currentVideo.ended && !currentVideo.loop) display(1);
+        else playVideo(currentVideo, token);
       } else if (!timerTotal) {
         display(1);
       }
-    } else {
-      pauseTimer();
-      if (currentVideo) currentVideo.pause();
     }
     updateButtons();
+  }
+  function togglePlay() {
+    if (playing) pausePlayback(); else resumePlayback();
     toast(playing ? 'Afspelen' : 'Pauze');
   }
 
@@ -544,22 +954,48 @@
     save();
     // Nieuwe tijd direct toepassen op de huidige dia
     if (timerTotal) {
-      const elapsed = timerTotal - (timer ? timerRemaining - (performance.now() - timerStart) : timerRemaining);
       const wasRunning = !!timer;
       pauseTimer();
-      clearTimeout(timer);
+      const elapsed = timerTotal - timerRemaining;
       timerTotal = settings.seconds * 1000;
       timerRemaining = Math.max(0, timerTotal - elapsed);
       if (wasRunning) runTimer(); else drawProgress();
     }
+    // Ken Burns: nieuwe duur, maar vanaf dezelfde stand verder (geen sprong in beeld)
+    const img = slides[front].querySelector('img.kb');
+    if (img) {
+      const dur = settings.seconds * 1000 + FADE;
+      const anim = img.getAnimations ? img.getAnimations()[0] : null;
+      const t = anim && anim.effect.getComputedTiming();
+      const progress = t && typeof t.progress === 'number' ? t.progress : null;
+      img.style.setProperty('--kb-dur', `${dur}ms`);
+      const anim2 = img.getAnimations ? img.getAnimations()[0] : null;
+      if (anim2 && progress !== null) anim2.currentTime = progress * dur;
+    }
   }
 
   function toggleMute() {
-    settings.muted = !settings.muted;
-    save();
-    if (currentVideo) currentVideo.muted = settings.muted;
+    if (currentVideo && currentVideo.muted && !settings.muted) {
+      // Browser had het geluid uitgezet (autoplay): nu alsnog aanzetten
+      currentVideo.muted = false;
+    } else {
+      settings.muted = !settings.muted;
+      save();
+      if (currentVideo) currentVideo.muted = settings.muted;
+    }
     updateButtons();
-    toast(settings.muted ? 'Geluid uit' : 'Geluid aan');
+    toast(isMuted() ? 'Geluid uit' : 'Geluid aan');
+  }
+
+  function setVolume(v) {
+    settings.volume = clampVolume(v);
+    if (settings.volume > 0 && settings.muted) settings.muted = false;
+    save();
+    if (currentVideo) {
+      currentVideo.volume = settings.volume;
+      if (settings.volume > 0) currentVideo.muted = settings.muted;
+    }
+    updateButtons();
   }
 
   function toggleShuffle() {
@@ -568,6 +1004,8 @@
     buildOrder(true);
     $('pos').textContent = `${pos + 1} / ${order.length}`;
     updateButtons();
+    preload();
+    pruneUrls();
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
   }
 
@@ -576,19 +1014,171 @@
     else document.documentElement.requestFullscreen?.().catch(() => {});
   }
 
+  const isMuted = () => (currentVideo ? currentVideo.muted : settings.muted);
   function updateButtons() {
     $('playIcon').innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
-    $('muteIcon').innerHTML = settings.muted ? ICON_MUTE : ICON_SOUND;
+    $('playBtn').setAttribute('aria-label', playing ? 'Pauze' : 'Afspelen');
+    const muted = isMuted();
+    $('muteIcon').innerHTML = muted ? ICON_MUTE : ICON_SOUND;
+    $('muteBtn').setAttribute('aria-label', muted ? 'Geluid aan' : 'Geluid uit');
     $('shuffleBtn').classList.toggle('on', settings.shuffle);
+    $('shuffleBtn').setAttribute('aria-pressed', String(settings.shuffle));
+    if (Number($('volume').value) !== settings.volume) $('volume').value = settings.volume;
+    show.classList.toggle('paused', !playing);
   }
 
   let toastTimer;
-  function toast(text) {
+  function toast(text, ms = 900) {
     const t = $('toast');
     t.textContent = text;
     t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 900);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  // ---------- Overzicht (miniaturen) ----------
+  const grid = $('grid');
+  const gridItems = $('gridItems');
+  const thumbUrls = new Map(); // knop -> url
+  let gridWasPlaying = false;
+  let gridClosedAt = 0;
+  let gridReturnFocus = null;
+  let loadObs = null;
+  let unloadObs = null;
+  const gridOpen = () => !grid.hidden;
+
+  function loadThumb(btn) {
+    if (thumbUrls.has(btn)) return;
+    const m = media[Number(btn.dataset.idx)];
+    if (!m || m.type !== 'image') return;
+    const img = btn.querySelector('img');
+    if (m.src) { if (!img.getAttribute('src')) img.src = m.src; return; }
+    const u = URL.createObjectURL(m.file);
+    thumbUrls.set(btn, u);
+    img.src = u;
+  }
+  function unloadThumb(btn) {
+    const img = btn.querySelector('img');
+    if (img) img.removeAttribute('src');
+    const u = thumbUrls.get(btn);
+    if (!u) return;
+    URL.revokeObjectURL(u);
+    thumbUrls.delete(btn);
+  }
+  function revokeThumbs() {
+    for (const u of thumbUrls.values()) URL.revokeObjectURL(u);
+    thumbUrls.clear();
+  }
+
+  function openGrid() {
+    if (gridOpen() || !order.length) return;
+    gridWasPlaying = playing;
+    if (playing) pausePlayback();
+    gridReturnFocus = document.activeElement;
+    const frag = document.createDocumentFragment();
+    order.forEach((idx, p) => {
+      const m = media[idx];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'thumb' + (p === pos ? ' current' : '');
+      b.dataset.pos = String(p);
+      b.dataset.idx = String(idx);
+      b.setAttribute('aria-label', `${p + 1}. ${baseName(m)}${m.type === 'video' ? ' (filmpje)' : ''}`);
+      if (p === pos) b.setAttribute('aria-current', 'true');
+      if (m.type === 'image') {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        img.loading = 'lazy';
+        b.appendChild(img);
+      } else {
+        b.insertAdjacentHTML('beforeend', ICON_VIDEO);
+      }
+      const cap = document.createElement('span');
+      cap.className = 'cap';
+      cap.textContent = baseName(m);
+      cap.setAttribute('aria-hidden', 'true');
+      b.appendChild(cap);
+      frag.appendChild(b);
+    });
+    gridItems.innerHTML = '';
+    gridItems.appendChild(frag);
+    grid.hidden = false;
+    grid.classList.add('open');
+    bar.inert = true;
+    if ('IntersectionObserver' in window) {
+      loadObs = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) loadThumb(e.target);
+      }, { root: gridItems, rootMargin: '300px 0px' });
+      unloadObs = new IntersectionObserver((entries) => {
+        for (const e of entries) if (!e.isIntersecting) unloadThumb(e.target);
+      }, { root: gridItems, rootMargin: '2000px 0px' });
+      for (const b of gridItems.children) { loadObs.observe(b); unloadObs.observe(b); }
+    } else {
+      for (const b of gridItems.children) loadThumb(b);
+    }
+    const cur = gridItems.querySelector('.thumb.current');
+    if (cur) {
+      cur.scrollIntoView({ block: 'center' });
+      cur.focus({ preventScroll: true });
+    }
+  }
+
+  // jumpPos: positie om naartoe te springen (of null); resume: vorige afspeelstand herstellen
+  function closeGrid(jumpPos, resume = true) {
+    if (!gridOpen()) return;
+    gridClosedAt = performance.now();
+    grid.hidden = true;
+    grid.classList.remove('open');
+    bar.inert = false;
+    if (loadObs) { loadObs.disconnect(); loadObs = null; }
+    if (unloadObs) { unloadObs.disconnect(); unloadObs = null; }
+    revokeThumbs();
+    gridItems.innerHTML = '';
+    if (!resume) return;
+    if (jumpPos != null && jumpPos >= 0 && jumpPos < order.length) {
+      playing = gridWasPlaying;
+      updateButtons();
+      pos = jumpPos;
+      display(0);
+    } else if (gridWasPlaying) {
+      resumePlayback();
+    }
+    const f = gridReturnFocus;
+    gridReturnFocus = null;
+    if (f && f !== document.body && document.contains(f) && !f.closest('#grid')) f.focus({ preventScroll: true });
+    pokeUI();
+  }
+
+  function toggleGrid() { if (gridOpen()) closeGrid(null); else openGrid(); }
+
+  // Klikken in het overzicht niet doorgeven aan de voorstelling (die zou vorige/volgende doen)
+  grid.addEventListener('click', (e) => e.stopPropagation());
+  grid.addEventListener('dblclick', (e) => e.stopPropagation());
+  gridItems.addEventListener('click', (e) => {
+    const b = e.target.closest('.thumb');
+    if (b) closeGrid(Number(b.dataset.pos));
+  });
+  $('gridClose').onclick = () => closeGrid(null);
+
+  function gridKey(e) {
+    const thumbs = [...gridItems.children];
+    if (!thumbs.length) return false;
+    let i = thumbs.indexOf(document.activeElement);
+    const cols = Math.max(1, getComputedStyle(gridItems).gridTemplateColumns.split(' ').filter(Boolean).length);
+    switch (e.key) {
+      case 'ArrowRight': i = i < 0 ? 0 : i + 1; break;
+      case 'ArrowLeft': i = i < 0 ? 0 : i - 1; break;
+      case 'ArrowDown': i = i < 0 ? 0 : i + cols; break;
+      case 'ArrowUp': i = i < 0 ? 0 : i - cols; break;
+      case 'Home': i = 0; break;
+      case 'End': i = thumbs.length - 1; break;
+      default: return false;
+    }
+    i = Math.min(thumbs.length - 1, Math.max(0, i));
+    thumbs[i].focus();
+    thumbs[i].scrollIntoView({ block: 'nearest' });
+    return true;
   }
 
   // Bedieningsbalk tonen bij muisbeweging, daarna weer verbergen
@@ -597,19 +1187,42 @@
     show.classList.add('ui');
     clearTimeout(uiTimer);
     uiTimer = setTimeout(() => {
-      if (!$('bar').matches(':hover') && document.activeElement !== $('barSeconds')) show.classList.remove('ui');
+      const keepOpen = bar.matches(':hover') || document.activeElement === $('barSeconds') || bar.querySelector(':focus-visible');
+      if (keepOpen) pokeUI(); else show.classList.remove('ui');
     }, 2500);
   }
   show.addEventListener('mousemove', pokeUI);
+  bar.addEventListener('focusin', pokeUI);
   show.addEventListener('touchstart', pokeUI, { passive: true });
+
+  // Enkele klik pas na korte tijd uitvoeren, zodat een dubbelklik alleen volledig scherm wisselt
+  let clickTimer = null;
   show.addEventListener('click', (e) => {
-    if (e.target.closest('#bar')) return;
-    // Klik links = vorige, rechts = volgende (zoals de Windows-diavoorstelling)
-    if (e.clientX < window.innerWidth / 3) display(-1);
-    else if (e.clientX > window.innerWidth * 2 / 3) display(1);
-    else togglePlay();
+    if (!e.target.isConnected || e.target.closest('#bar, #grid')) return;
+    pokeUI();
+    clearTimeout(clickTimer);
+    clickTimer = null;
+    if (e.detail > 1) return;
+    const x = e.clientX;
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      if (!show.classList.contains('active') || gridOpen()) return;
+      // Klik links = vorige, rechts = volgende (zoals de Windows-diavoorstelling)
+      if (x < window.innerWidth / 3) display(-1);
+      else if (x > window.innerWidth * 2 / 3) display(1);
+      else togglePlay();
+    }, 250);
   });
-  show.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar')) toggleFullscreen(); });
+  show.addEventListener('dblclick', (e) => {
+    if (e.target.closest('#bar, #grid')) return;
+    if (performance.now() - gridClosedAt < 500) return; // tweede klik van een dubbelklik op een miniatuur
+    clearTimeout(clickTimer);
+    clickTimer = null;
+    toggleFullscreen();
+  });
+
+  // Knoppen niet focussen bij muisklik (anders bedient de spatiebalk de knop i.p.v. pauze)
+  bar.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
 
   $('startBtn').onclick = start;
   $('prevBtn').onclick = () => display(-1);
@@ -617,34 +1230,72 @@
   $('playBtn').onclick = togglePlay;
   $('muteBtn').onclick = toggleMute;
   $('shuffleBtn').onclick = toggleShuffle;
+  $('gridBtn').onclick = openGrid;
   $('fsBtn').onclick = toggleFullscreen;
   $('exitBtn').onclick = stop;
   $('barSeconds').addEventListener('change', (e) => setSeconds(e.target.value));
-  $('barSeconds').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); });
+  $('barSeconds').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === 'Escape') e.target.blur();
+    e.stopPropagation();
+  });
+  $('volume').addEventListener('input', (e) => setVolume(e.target.value));
+  $('volume').addEventListener('keydown', (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) e.stopPropagation();
+  });
 
   document.addEventListener('keydown', (e) => {
     if (!show.classList.contains('active')) {
-      if (e.key === 'Enter' && !$('startBtn').disabled && e.target.tagName !== 'BUTTON') start();
+      if (e.key === 'Enter' && !$('startBtn').disabled && !['BUTTON', 'SELECT', 'A'].includes(e.target.tagName)) {
+        if (e.target.id === 'seconds') { settings.seconds = clampSeconds(e.target.value); e.target.value = settings.seconds; save(); }
+        start();
+      }
       return;
     }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (gridOpen()) {
+      if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') { e.preventDefault(); closeGrid(null); }
+      else if (gridKey(e)) e.preventDefault();
+      return; // spatie/Enter bedienen de gefocuste miniatuur
+    }
+    // Spatie/Enter op een met toetsenbord gefocuste knop: de knop zelf laten werken
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.closest && e.target.closest('button')) return;
     switch (e.key) {
       case ' ': case 'k': e.preventDefault(); togglePlay(); break;
-      case 'ArrowRight': case 'PageDown': display(1); break;
-      case 'ArrowLeft': case 'PageUp': display(-1); break;
-      case 'Home': pos = 0; display(0); break;
-      case 'End': pos = order.length - 1; display(0); break;
+      case 'ArrowRight': case 'PageDown': e.preventDefault(); display(1); break;
+      case 'ArrowLeft': case 'PageUp': e.preventDefault(); display(-1); break;
+      case 'Home': e.preventDefault(); pos = 0; display(0); break;
+      case 'End': e.preventDefault(); pos = order.length - 1; display(0); break;
       case '+': case '=': setSeconds(settings.seconds + 1); toast(`${settings.seconds} sec per foto`); break;
       case '-': case '_': setSeconds(settings.seconds - 1); toast(`${settings.seconds} sec per foto`); break;
       case 'f': case 'F': toggleFullscreen(); break;
       case 'm': case 'M': toggleMute(); break;
       case 's': case 'S': toggleShuffle(); break;
+      case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;
     }
     pokeUI();
   });
 
+  // Alleen-lezen testhaak
+  Object.defineProperty(window, 'diashow', {
+    value: Object.freeze({
+      get state() {
+        return { pos, order: [...order], playing, count: media.length, liveUrls: slideUrls.size, source };
+      },
+    }),
+    writable: false,
+    configurable: false,
+  });
+
   updateButtons();
+
+  // Gestart via de Windows-starter: lijst staat klaar, meteen beginnen
+  const listed = window.DIASHOW_FILES;
+  if (Array.isArray(listed) && listed.length) {
+    $('count').textContent = 'Bestanden controleren…';
+    setList(listed).then((ok) => { if (ok && !show.classList.contains('active')) start(); }).catch(() => {});
+  }
 })();
 </script>
 </body>
