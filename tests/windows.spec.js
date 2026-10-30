@@ -174,4 +174,14 @@ test('Edge rotates a photo in a subfolder via the real helper', async ({ page })
     return img ? `${img.naturalWidth}x${img.naturalHeight}` : '';
   })).toBe('480x640');
   expect(fs.existsSync(path.join(photos, 'Diavoorstelling-originelen', 'sub map', 'strand.jpg'))).toBe(true);
+
+  // Datum aanpassen (deze foto had geen datum in EXIF)
+  await page.keyboard.press('d');
+  await expect(page.locator('#dateInput')).toHaveValue('2020-05-01');
+  await page.fill('#dateInput', '1999-08-11');
+  await page.locator('#dateInput').press('Enter');
+  await expect(page.locator('#toast')).toHaveText('Datum opgeslagen in de foto', { timeout: 15_000 });
+  expect(readMeta(file(path.join('sub map', 'strand.jpg'))).dateOriginal).toBe('1999:08:11 12:00:00');
+  expect(readMeta(file(path.join('sub map', 'strand.jpg'))).orientation).toBe(6);
+  await expect(page.locator('#date')).toHaveText('11 augustus 1999');
 });

@@ -57,6 +57,7 @@ function readMeta(buf) {
   const out = {
     xptitle: t.has(0x9c9b) ? t.get(0x9c9b).raw.toString('utf16le').replace(/\0+$/, '') : null,
     xpsubject: t.has(0x9c9f) ? t.get(0x9c9f).raw.toString('utf16le').replace(/\0+$/, '') : null,
+    labels: t.has(0x9c9e) ? t.get(0x9c9e).raw.toString('utf16le').replace(/\0+$/, '') : null,
     description: str(t.get(0x010e)),
     orientation: t.has(0x0112) ? t.get(0x0112).short : null,
     make: str(t.get(0x010f)),
@@ -121,6 +122,8 @@ function withCameraExif(jpg, { le, thumbnail }) {
       [0x0132, 2, 20, s('2024:07:01 12:00:00')],
       [0x8769, 4, 1, long(exifAt)],
       [0x8825, 4, 1, long(gpsAt)],
+      // Labels die de fotograaf al gaf (Windows: 'Labels'); moeten bewaard blijven
+      [0x9c9e, 1, Buffer.from('Vakantie;Strand\0', 'utf16le').length, Buffer.from('Vakantie;Strand\0', 'utf16le')],
     ], 8, 0);
     const len0 = build(0, 0).length;
     const exif = (at) => ifd([[0x9003, 2, 20, s('2024:07:01 11:59:58')]], at, 0);

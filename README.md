@@ -107,6 +107,16 @@ Naast de plek staat wanneer de foto gemaakt is, bijvoorbeeld *📅 1 juli 2024*:
 de opnamedatum uit de foto zelf (EXIF), of anders de datum van het bestand
 (bij filmpjes en foto's zonder opnamedatum).
 
+Klopt de datum niet? Druk op `D` (of de kalenderknop in de balk), kies de
+juiste dag en druk op `Enter`. De datum wordt in de foto zelf opgeslagen als
+opnamedatum (Windows: *Genomen op*); de tijd van de opname blijft hetzelfde.
+Net als bij bijschrift en plek: alleen bij JPG-foto's, met reservekopie.
+
+Wil je bij één foto geen datum zien? Zet in hetzelfde venster een vinkje bij
+**Datum bij deze foto niet tonen**. Dat wordt als label in de foto bewaard
+(Windows: *Labels* → "Diavoorstelling: geen datum"); bestaande labels blijven
+staan. De schakelaar **Datum tonen** geldt voor alle foto's tegelijk.
+
 Op het instellingenscherm zet je los van elkaar aan of uit:
 **Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht),
 **Datum tonen** en **Bestandsnaam tonen** (linksboven, standaard uit).
@@ -129,6 +139,7 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `V` | Scherm vullen aan/uit |
 | `T` | Bijschrift bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
 | `P` | Plek aanpassen (wordt in de foto opgeslagen) |
+| `D` | Datum aanpassen (wordt in de foto opgeslagen) |
 | `R` | Foto een kwartslag rechtsom draaien (wordt in de foto opgeslagen) |
 | `G` | Overzicht openen/sluiten: alle foto's per map, met zoekvak; klik opent een foto in pauze om te bewerken |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
