@@ -289,7 +289,7 @@
       </div>
       <div class="setting">
         <label for="captions">Teksten bij foto's tonen
-          <small>Een tekst zet je tijdens de voorstelling met <kbd>T</kbd> of het potloodje in de balk</small>
+          <small>Een tekst zet je tijdens de voorstelling met <kbd>T</kbd> of het potloodje; hij wordt in de JPG-foto zelf opgeslagen</small>
         </label>
         <input type="checkbox" id="captions">
       </div>
@@ -302,7 +302,7 @@
     <div class="keys">
       <kbd>Spatie</kbd> pauze &nbsp; <kbd>←</kbd><kbd>→</kbd> vorige/volgende &nbsp;
       <kbd>+</kbd><kbd>−</kbd> sneller/langzamer &nbsp; <kbd>F</kbd> volledig scherm &nbsp;
-      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>T</kbd> tekst &nbsp; <kbd>G</kbd> overzicht &nbsp;
+      <kbd>M</kbd> geluid &nbsp; <kbd>S</kbd> willekeurig &nbsp; <kbd>A</kbd> bewegende foto's &nbsp; <kbd>V</kbd> scherm vullen &nbsp; <kbd>T</kbd> tekst &nbsp; <kbd>R</kbd> draaien &nbsp; <kbd>G</kbd> overzicht &nbsp;
       <kbd>Home</kbd><kbd>End</kbd> eerste/laatste &nbsp; <kbd>Esc</kbd> instellingen
     </div>
   </div>
@@ -318,7 +318,7 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <form id="captionEdit" hidden>
-    <label for="captionInput">Tekst bij deze foto</label>
+    <label for="captionInput">Tekst bij deze foto <small style="display:inline;font-weight:400">(wordt in de foto opgeslagen)</small></label>
     <textarea id="captionInput" rows="2" maxlength="300" placeholder="Bijvoorbeeld: zo nog even de tuin grasmaaien"></textarea>
     <small>Enter = opslaan &nbsp;·&nbsp; Esc = annuleren &nbsp;·&nbsp; leeg laten = tekst weghalen</small>
     <div class="pick-row">
@@ -345,6 +345,9 @@
     <div class="sep"></div>
     <button class="icon" id="shuffleBtn" type="button" title="Willekeurig (S)" aria-label="Willekeurige volgorde" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+    </button>
+    <button class="icon" id="rotateBtn" type="button" title="Foto draaien (R)" aria-label="Foto een kwartslag rechtsom draaien">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.55 5.55 11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11a7.906 7.906 0 0 0-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42 1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
     </button>
     <button class="icon" id="captionBtn" type="button" title="Tekst bij deze foto (T)" aria-label="Tekst bij deze foto">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -654,7 +657,7 @@
   // Weergave-URL: relatieve URL uit de lijst (nooit intrekken) of een eigen object-URL
   function urlOf(idx) {
     const m = media[idx];
-    if (m.src) return m.src;
+    if (m.src) return m.version ? `${m.src}?v=${m.version}` : m.src;
     let u = slideUrls.get(idx);
     if (!u) { u = URL.createObjectURL(m.file); slideUrls.set(idx, u); }
     return u;
@@ -1083,55 +1086,301 @@
     toast(settings.shuffle ? 'Willekeurig aan' : 'Willekeurig uit');
   }
 
-  // ---------- Teksten bij foto's (onthouden in de browser) ----------
-  const CAPTIONS_KEY = 'diashow-teksten';
-  let captions = {};
-  try {
-    const raw = JSON.parse(localStorage.getItem(CAPTIONS_KEY) || '{}');
-    if (raw && typeof raw === 'object') {
-      for (const [k, v] of Object.entries(raw)) if (typeof v === 'string' && v) captions[k] = v;
-    }
-  } catch {}
-  const saveCaptions = () => { try { localStorage.setItem(CAPTIONS_KEY, JSON.stringify(captions)); } catch {} };
-  // Sleutel per bestand: vaste plek op schijf (Windows-starter) of pad + grootte (zelf gekozen)
-  const captionKey = (m) => (m.file ? `${m.path}|${m.file.size}` : m.src || m.path);
-  const currentMedia = () => (order.length ? media[order[pos]] : null);
+  // ---------- JPEG-metadata (EXIF): tekst en draaistand in de foto zelf ----------
+  // Alleen de metadata verandert; de beeldgegevens blijven byte voor byte gelijk.
+  // Bestaande gegevens (camera, datum, GPS, fabrikantgegevens) worden nooit verplaatst:
+  // bij een wijziging komt een nieuwe kopie van de eerste EXIF-lijst (IFD0) achteraan,
+  // en wijst de kop daarheen. Zo blijven alle bestaande verwijzingen geldig.
+  const Exif = (() => {
+    const ORIENT = 0x0112, DESC = 0x010E, XPTITLE = 0x9C9B;
+    const SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
+    // Teksten die camera's zelf invullen; die tonen we niet als bijschrift
+    const JUNK = /^(OLYMPUS DIGITAL CAMERA|SONY DSC|DIGITAL CAMERA|KONICA MINOLTA DIGITAL CAMERA|default|Default|image|Image|DCIM|\s*)$/;
 
-  function showCaption() {
+    function segments(b) {
+      if (b[0] !== 0xFF || b[1] !== 0xD8) throw new Error('Geen JPG-bestand');
+      let p = 2, insertAt = 2;
+      while (p + 4 <= b.length && b[p] === 0xFF) {
+        const marker = b[p + 1];
+        if (marker === 0xFF) { p++; continue; }
+        if (marker === 0xDA || marker === 0xD9) break;
+        const len = (b[p + 2] << 8) | b[p + 3];
+        if (len < 2) break;
+        if (marker === 0xE1 && len >= 16 && b[p + 4] === 0x45 && b[p + 5] === 0x78 && b[p + 6] === 0x69 &&
+            b[p + 7] === 0x66 && b[p + 8] === 0 && b[p + 9] === 0) {
+          return { seg: p, segEnd: Math.min(b.length, p + 2 + len), tiff: p + 10, insertAt };
+        }
+        if (marker === 0xE0 && p === 2) insertAt = p + 2 + len; // na JFIF-kop invoegen
+        p += 2 + len;
+      }
+      return { seg: -1, insertAt };
+    }
+
+    function parse(b, info) {
+      const dv = new DataView(b.buffer, b.byteOffset + info.tiff, info.segEnd - info.tiff);
+      const bo = dv.getUint16(0);
+      if (bo !== 0x4949 && bo !== 0x4D4D) throw new Error('Onbekende EXIF-kop');
+      const le = bo === 0x4949;
+      if (dv.getUint16(2, le) !== 42) throw new Error('Onbekende EXIF-kop');
+      const ifd = dv.getUint32(4, le);
+      const n = dv.getUint16(ifd, le);
+      const entries = [];
+      for (let i = 0; i < n; i++) {
+        const o = ifd + 2 + i * 12;
+        entries.push({ tag: dv.getUint16(o, le), type: dv.getUint16(o + 2, le), count: dv.getUint32(o + 4, le), at: o });
+      }
+      return { dv, le, entries, next: dv.getUint32(ifd + 2 + n * 12, le) };
+    }
+
+    function valueOf(t, e) {
+      const size = (SIZE[e.type] || 1) * e.count;
+      const off = size <= 4 ? e.at + 8 : t.dv.getUint32(e.at + 8, t.le);
+      return new Uint8Array(t.dv.buffer, t.dv.byteOffset + off, size);
+    }
+
+    function read(b) {
+      const out = { caption: '', orientation: 1, hasExif: false };
+      const info = segments(b);
+      if (info.seg < 0) return out;
+      const t = parse(b, info);
+      out.hasExif = true;
+      let desc = '', xp = '';
+      for (const e of t.entries) {
+        try {
+          if (e.tag === ORIENT && e.type === 3) out.orientation = t.dv.getUint16(e.at + 8, t.le) || 1;
+          else if (e.tag === XPTITLE) xp = new TextDecoder('utf-16le').decode(valueOf(t, e));
+          else if (e.tag === DESC) desc = new TextDecoder('utf-8').decode(valueOf(t, e));
+        } catch {}
+      }
+      const clean = (v) => v.replace(/\0+$/g, '').replace(/\0/g, '').trim();
+      xp = clean(xp); desc = clean(desc);
+      out.caption = xp || (JUNK.test(desc) ? '' : desc);
+      return out;
+    }
+
+    // changes: { caption?: string ('' = weghalen), orientation?: 1..8 }
+    function write(b, changes) {
+      const info = segments(b);
+      const setCaption = typeof changes.caption === 'string';
+      const caption = setCaption ? changes.caption.trim() : '';
+      const orient = changes.orientation;
+
+      let le = true, oldTiff = null, keep = [], t = null;
+      if (info.seg >= 0) {
+        t = parse(b, info);
+        le = t.le;
+        // Snelle weg: alleen de draaistand, en die staat er al: twee bytes aanpassen
+        const o = t.entries.find((e) => e.tag === ORIENT && e.type === 3 && e.count === 1);
+        if (!setCaption && orient && o) {
+          const copy = b.slice();
+          new DataView(copy.buffer, copy.byteOffset + info.tiff).setUint16(o.at + 8, orient, le);
+          return copy;
+        }
+        oldTiff = b.subarray(info.tiff, info.segEnd);
+        keep = t.entries.filter((e) => !(setCaption && (e.tag === DESC || e.tag === XPTITLE)) && !(orient && e.tag === ORIENT));
+      }
+
+      // Nieuwe waarden
+      const added = [];
+      if (orient) added.push({ tag: ORIENT, type: 3, count: 1, data: null, short: orient });
+      if (setCaption && caption) {
+        // Klassiek veld: alleen gewone tekens (andere programma's lezen het niet als UTF-8);
+        // de exacte tekst met accenten staat in XPTitle (dat leest Windows als 'Titel')
+        const ascii = caption.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+          .replace(/[^\x20-\x7e]/g, '?');
+        const desc = new Uint8Array(ascii.length + 1);
+        for (let i = 0; i < ascii.length; i++) desc[i] = ascii.charCodeAt(i);
+        added.push({ tag: DESC, type: 2, count: desc.length, data: desc });
+        const xp = new Uint8Array(caption.length * 2 + 2);
+        for (let i = 0; i < caption.length; i++) { const c = caption.charCodeAt(i); xp[i * 2] = c & 0xFF; xp[i * 2 + 1] = c >> 8; }
+        added.push({ tag: XPTITLE, type: 1, count: xp.length, data: xp });
+      }
+
+      const base = oldTiff ? oldTiff.length : 8;
+      const ifdAt = base + (base & 1); // even beginnen
+      const all = [
+        ...keep.map((e) => ({ tag: e.tag, old: e })),
+        ...added.map((e) => ({ tag: e.tag, add: e })),
+      ].sort((x, y) => x.tag - y.tag);
+      const ifdLen = 2 + all.length * 12 + 4;
+      let dataAt = ifdAt + ifdLen;
+      const extra = [];
+      const total = () => dataAt;
+      for (const x of all) {
+        if (x.add && x.add.data && x.add.data.length > 4) {
+          x.add.offset = dataAt;
+          extra.push({ at: dataAt, data: x.add.data });
+          dataAt += x.add.data.length + (x.add.data.length & 1);
+        }
+      }
+      const tiff = new Uint8Array(total());
+      const dv = new DataView(tiff.buffer);
+      if (oldTiff) tiff.set(oldTiff, 0);
+      else { dv.setUint16(0, 0x4949); dv.setUint16(2, 42, true); }
+      dv.setUint32(4, ifdAt, le);
+      dv.setUint16(ifdAt, all.length, le);
+      all.forEach((x, i) => {
+        const o = ifdAt + 2 + i * 12;
+        if (x.old) {
+          // Ongewijzigd overnemen: tag, type, aantal en waarde/verwijzing zoals ze waren
+          tiff.set(oldTiff.subarray(x.old.at, x.old.at + 12), o);
+        } else {
+          const e = x.add;
+          dv.setUint16(o, e.tag, le); dv.setUint16(o + 2, e.type, le); dv.setUint32(o + 4, e.count, le);
+          if (e.data == null) dv.setUint16(o + 8, e.short, le);
+          else if (e.data.length <= 4) tiff.set(e.data, o + 8);
+          else dv.setUint32(o + 8, e.offset, le);
+        }
+      });
+      dv.setUint32(ifdAt + 2 + all.length * 12, t ? t.next : 0, le);
+      for (const x of extra) tiff.set(x.data, x.at);
+
+      const segLen = 2 + 6 + tiff.length;
+      if (segLen > 0xFFFF) throw new Error('De metadata van deze foto is te groot');
+      const head = new Uint8Array([0xFF, 0xE1, segLen >> 8, segLen & 0xFF, 0x45, 0x78, 0x69, 0x66, 0, 0]);
+      const before = info.seg >= 0 ? b.subarray(0, info.seg) : b.subarray(0, info.insertAt);
+      const after = info.seg >= 0 ? b.subarray(info.segEnd) : b.subarray(info.insertAt);
+      const out = new Uint8Array(before.length + head.length + tiff.length + after.length);
+      out.set(before, 0);
+      out.set(head, before.length);
+      out.set(tiff, before.length + head.length);
+      out.set(after, before.length + head.length + tiff.length);
+      return out;
+    }
+
+    // Draaistand na een kwartslag rechtsom (ook voor gespiegelde standen)
+    const ROTATE_RIGHT = { 1: 6, 2: 7, 3: 8, 4: 5, 5: 2, 6: 3, 7: 4, 8: 1 };
+    return { read, write, rotateRight: (o) => ROTATE_RIGHT[o] || 6 };
+  })();
+
+  // ---------- Tekst en draaien: lezen uit en schrijven naar de foto ----------
+  // Schrijven kan alleen via het hulpprogramma van Diavoorstelling.bat (een browser mag zelf
+  // geen bestanden aanpassen). Lezen kan ook bij zelf gekozen bestanden.
+  const helper = typeof window.DIASHOW_SERVER === 'string' && typeof window.DIASHOW_TOKEN === 'string'
+    ? { url: window.DIASHOW_SERVER.replace(/\/$/, ''), token: window.DIASHOW_TOKEN } : null;
+  const isJpeg = (m) => !!m && m.type === 'image' && /\.(jpe?g|jfif)$/i.test(m.path);
+  const canWrite = (m) => isJpeg(m) && !!helper && source === 'lijst';
+  const helperUrl = (what, m, extra = '') =>
+    `${helper.url}/${what}?token=${encodeURIComponent(helper.token)}${m ? `&pad=${encodeURIComponent(m.path)}` : ''}${extra}`;
+  // Houdt het hulpprogramma in leven zolang de voorstelling open is
+  if (helper) setInterval(() => { fetch(helperUrl('ping')).catch(() => {}); }, 30000);
+
+  const metaCache = new Map(); // pad -> { caption, orientation }
+  async function fileBytes(m, headOnly) {
+    if (m.file) {
+      const part = headOnly ? m.file.slice(0, 256 * 1024) : m.file;
+      return new Uint8Array(await part.arrayBuffer());
+    }
+    if (!helper) return null;
+    const r = await fetch(helperUrl('bestand', m, headOnly ? '&kop=1' : ''), { cache: 'no-store' });
+    if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+  async function metaOf(m) {
+    if (!isJpeg(m)) return null;
+    if (metaCache.has(m.path)) return metaCache.get(m.path);
+    let meta = null;
+    try {
+      const b = await fileBytes(m, true);
+      if (b) meta = Exif.read(b);
+    } catch {}
+    if (meta) metaCache.set(m.path, meta);
+    return meta;
+  }
+
+  const currentMedia = () => (order.length ? media[order[pos]] : null);
+  async function showCaption() {
     const m = currentMedia();
     const c = $('caption');
-    c.textContent = m ? captions[captionKey(m)] || '' : '';
     c.classList.toggle('off', !settings.captions);
+    c.textContent = '';
+    const meta = await metaOf(m);
+    if (m === currentMedia()) c.textContent = meta ? meta.caption : '';
+  }
+
+  // Waarom tekst/draaien hier niet kan, of '' als het wel kan
+  function whyNotWritable(m) {
+    if (!m) return 'Geen foto';
+    if (!isJpeg(m)) return "Tekst en draaien kan alleen bij JPG-foto's";
+    if (!canWrite(m)) return 'Opslaan in de foto kan alleen als je de diavoorstelling start met Diavoorstelling.bat';
+    return '';
+  }
+
+  // Wijzigingen één voor één wegschrijven (lezen, aanpassen, controleren, opslaan)
+  let writeQueue = Promise.resolve();
+  function changePhoto(m, changes) {
+    const job = writeQueue.then(async () => {
+      const bytes = await fileBytes(m, false);
+      const updated = Exif.write(bytes, changes);
+      const check = Exif.read(updated);
+      if (typeof changes.caption === 'string' && check.caption !== changes.caption.trim()) throw new Error('Controle mislukt');
+      if (changes.orientation && check.orientation !== changes.orientation) throw new Error('Controle mislukt');
+      const r = await fetch(helperUrl('bestand', m), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: updated });
+      if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
+      metaCache.set(m.path, { caption: check.caption, orientation: check.orientation, hasExif: true });
+      m.version = (m.version || 0) + 1; // nieuwe versie laden (niet uit de cache)
+      return check;
+    });
+    writeQueue = job.catch(() => {});
+    return job;
   }
 
   let captionWasPlaying = false;
   const captionEditing = () => !$('captionEdit').hidden;
-  function openCaptionEditor() {
+  async function openCaptionEditor() {
     const m = currentMedia();
     if (!m || captionEditing()) return;
+    const why = whyNotWritable(m);
+    if (why) { toast(why, 2500); return; }
     captionWasPlaying = playing;
     if (playing) pausePlayback();
     pokeUI();
     $('captionEdit').hidden = false;
     const input = $('captionInput');
-    input.value = captions[captionKey(m)] || '';
+    const meta = await metaOf(m);
+    input.value = meta ? meta.caption : '';
     input.focus();
     input.select();
   }
-  function closeCaptionEditor(saveIt) {
+  async function closeCaptionEditor(saveIt) {
     if (!captionEditing()) return;
     const m = currentMedia();
-    if (saveIt && m) {
-      const text = $('captionInput').value.trim();
-      if (text) captions[captionKey(m)] = text; else delete captions[captionKey(m)];
-      saveCaptions();
-      if (text && !settings.captions) { settings.captions = true; save(); }
-      toast(text ? 'Tekst opgeslagen' : 'Tekst weggehaald');
-    }
+    const text = $('captionInput').value.trim();
     $('captionEdit').hidden = true;
-    showCaption();
     show.focus({ preventScroll: true });
+    if (saveIt && m) {
+      try {
+        await changePhoto(m, { caption: text });
+        if (text && !settings.captions) { settings.captions = true; save(); }
+        toast(text ? 'Tekst opgeslagen in de foto' : 'Tekst weggehaald');
+      } catch (err) {
+        toast(`Kon de foto niet opslaan: ${err.message}`, 4000);
+      }
+    }
+    showCaption();
     if (captionWasPlaying) resumePlayback();
+  }
+
+  async function rotatePhoto() {
+    const m = currentMedia();
+    const why = whyNotWritable(m);
+    if (why) { toast(why, 2500); return; }
+    // Niet doorschuiven terwijl we draaien
+    const wasPlaying = playing;
+    if (playing) pausePlayback();
+    try {
+      const meta = await metaOf(m);
+      const next = Exif.rotateRight(meta ? meta.orientation : 1);
+      metaCache.set(m.path, { ...(meta || { caption: '' }), orientation: next }); // snel nog eens drukken
+      await changePhoto(m, { orientation: next });
+      if (m === currentMedia()) display(0); // opnieuw laden in de nieuwe stand
+      toast('Foto gedraaid');
+    } catch (err) {
+      metaCache.delete(m.path);
+      toast(`Kon de foto niet draaien: ${err.message}`, 4000);
+    }
+    if (wasPlaying) resumePlayback();
   }
 
   function toggleFill() {
@@ -1206,7 +1455,7 @@
     const m = media[Number(btn.dataset.idx)];
     if (!m || m.type !== 'image') return;
     const img = btn.querySelector('img');
-    if (m.src) { if (!img.getAttribute('src')) img.src = m.src; return; }
+    if (m.src) { if (!img.getAttribute('src')) img.src = m.version ? `${m.src}?v=${m.version}` : m.src; return; }
     const u = URL.createObjectURL(m.file);
     thumbUrls.set(btn, u);
     img.src = u;
@@ -1387,6 +1636,7 @@
   $('shuffleBtn').onclick = toggleShuffle;
   $('kbBtn').onclick = toggleKenBurns;
   $('captionBtn').onclick = openCaptionEditor;
+  $('rotateBtn').onclick = rotatePhoto;
   $('captionCancel').onclick = () => closeCaptionEditor(false);
   $('captionEdit').addEventListener('submit', (e) => { e.preventDefault(); closeCaptionEditor(true); });
   $('captionInput').addEventListener('keydown', (e) => {
@@ -1443,6 +1693,7 @@
       case 'a': case 'A': toggleKenBurns(); break;
       case 'v': case 'V': toggleFill(); break;
       case 't': case 'T': e.preventDefault(); openCaptionEditor(); break;
+      case 'r': case 'R': rotatePhoto(); break;
       case 'g': case 'G': openGrid(); break;
       case 'Escape': if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stop(); break;
       default: return;
@@ -1453,6 +1704,7 @@
   // Alleen-lezen testhaak
   Object.defineProperty(window, 'diashow', {
     value: Object.freeze({
+      exif: Exif, // voor tests: metadata lezen/schrijven
       get state() {
         return { pos, order: [...order], playing, count: media.length, liveUrls: slideUrls.size, source };
       },

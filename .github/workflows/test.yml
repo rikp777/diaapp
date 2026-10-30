@@ -45,3 +45,32 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+  # Echte test op Windows: Diavoorstelling.bat (PowerShell-hulpprogramma) met Edge
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Windows test
+        env:
+          DIASHOW_GEEN_MEDIA: '1'
+        run: npx playwright test --project=windows
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-windows
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14

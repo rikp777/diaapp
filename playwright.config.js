@@ -25,6 +25,10 @@ module.exports = defineConfig({
     },
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', testIgnore: /windows\.spec\.js/, use: { ...devices['Desktop Chrome'] } },
+    // Echte Diavoorstelling.bat (PowerShell-hulpprogramma) met Edge; alleen op Windows
+    ...(process.platform === 'win32'
+      ? [{ name: 'windows', testMatch: /windows\.spec\.js/, timeout: 120_000, use: { ...devices['Desktop Edge'], channel: 'msedge' } }]
+      : []),
   ],
 });

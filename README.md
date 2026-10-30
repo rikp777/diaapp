@@ -54,15 +54,31 @@ Bestanden worden op naam gesorteerd, met getallen in de goede volgorde
 | Scherm vullen | Snijdt foto's en filmpjes bij zodat er geen zwarte randen zijn. Staande beelden op een liggend scherm (en andersom) worden niet bijgesneden, zodat je ze helemaal ziet. Ook tijdens de voorstelling aan/uit met `V` of de knop met het kader. |
 | Bewegende foto's | Foto's langzaam inzoomen en verschuiven (standaard uit). Ook tijdens de voorstelling aan/uit met `A` of de knop met het vergrootglas. |
 
-### Tekst bij een foto
+### Tekst bij een foto en foto's draaien
 
 Druk tijdens de voorstelling op `T` (of klik op het potloodje in de balk), typ
 een tekst, bijvoorbeeld *"zo nog even de tuin grasmaaien"*, en druk op
-`Enter`. De tekst staat daarna onderaan in beeld, elke keer als die foto
-langskomt. De voorstelling pauzeert zolang je typt. Tekst leegmaken en
-`Enter` haalt hem weg. Met **Teksten bij foto's tonen** op het
-instellingenscherm zet je alle teksten aan of uit. Teksten worden op deze
-computer onthouden.
+`Enter`. Met `R` (of de draaiknop) draai je een foto een kwartslag rechtsom.
+
+Tekst en draaistand worden **in de foto zelf** opgeslagen (in de
+EXIF-metadata). Zo blijven ze bij de foto, ook als je hem kopieert. In
+Windows zie je de tekst bij *Eigenschappen → Details → Titel*. De beeldkwaliteit
+verandert niet: alleen de metadata wordt aangepast, en camera, datum en
+GPS-gegevens blijven behouden. De datum van het bestand blijft ook gelijk.
+
+- **Reservekopie:** voor de eerste wijziging aan een foto wordt het origineel
+  bewaard in de verborgen map `Diavoorstelling-originelen` in de fotomap.
+- **Alleen JPG-foto's** (bijna alle camera- en telefoonfoto's). Bij filmpjes en
+  andere bestanden legt de app uit dat het niet kan.
+- **Alleen via `Diavoorstelling.bat`:** een browser mag zelf geen bestanden
+  aanpassen. Het startbestand start daarom op de achtergrond een klein
+  hulpprogramma dat alleen vanaf deze computer bereikbaar is (127.0.0.1, met
+  een geheime sleutel) en alleen JPG-bestanden in de fotomap mag aanpassen. Het
+  stopt vanzelf als de voorstelling dicht is. In de online versie worden
+  teksten wel getoond, maar niet opgeslagen.
+
+Met **Teksten bij foto's tonen** op het instellingenscherm zet je alle teksten
+aan of uit.
 
 Instellingen worden onthouden in de browser (`localStorage`).
 
@@ -80,7 +96,8 @@ Instellingen worden onthouden in de browser (`localStorage`).
 | `S` | Willekeurige volgorde aan/uit |
 | `A` | Bewegende foto's aan/uit |
 | `V` | Scherm vullen aan/uit |
-| `T` | Tekst bij de huidige foto zetten of aanpassen |
+| `T` | Tekst bij de huidige foto zetten of aanpassen (wordt in de foto opgeslagen) |
+| `R` | Foto een kwartslag rechtsom draaien (wordt in de foto opgeslagen) |
 | `G` | Miniatuuroverzicht openen/sluiten |
 | `Esc` of tandwiel | Sluit eerst het overzicht, dan volledig scherm, en gaat daarna naar het instellingenscherm |
 
@@ -127,7 +144,7 @@ npx playwright install chromium
 npm test
 ```
 
-De tests staan in `tests/slideshow.spec.js` en maken hun testfoto's en
+De tests staan in `tests/` (`slideshow.spec.js`, `metadata.spec.js`; `windows.spec.js` voert op Windows het echte `Diavoorstelling.bat` uit met Edge) en maken hun testfoto's en
 -filmpjes zelf aan met ffmpeg in een tijdelijke map, dus ffmpeg moet
 geïnstalleerd zijn. Op GitHub draaien ze automatisch via
 `.github/workflows/test.yml`.
