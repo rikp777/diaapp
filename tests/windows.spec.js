@@ -53,10 +53,18 @@ test.beforeAll(async ({ browser }) => {
   if (fs.existsSync(lijstPad)) fs.rmSync(lijstPad);
   // Dubbelklikken nabootsen: cmd voert het .bat-bestand uit; de test opent zelf Edge
   child = spawn('cmd.exe', ['/c', 'Diavoorstelling.bat'], {
-    cwd: photos, env: { ...process.env, DIA_GEEN_BROWSER: '1' }, stdio: 'ignore', windowsHide: true,
+    cwd: photos, env: { ...process.env, DIA_GEEN_BROWSER: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
-  await expect.poll(() => (fs.existsSync(lijstPad) ? fs.readFileSync(lijstPad, 'utf8') : ''), { timeout: 60_000 })
-    .toContain('DIASHOW_SERVER');
+  // Uitvoer van het startbestand bewaren (in testmodus komen meldingen hier i.p.v. in een venster)
+  let uitvoer = '';
+  child.stdout.on('data', (d) => { uitvoer += d; });
+  child.stderr.on('data', (d) => { uitvoer += d; });
+  try {
+    await expect.poll(() => (fs.existsSync(lijstPad) ? fs.readFileSync(lijstPad, 'utf8') : ''), { timeout: 60_000 })
+      .toContain('DIASHOW_SERVER');
+  } catch (err) {
+    throw new Error(`Diavoorstelling.bat schreef geen lijst. Uitvoer van het startbestand:\n${uitvoer || '(geen)'}\n\n${err.message}`);
+  }
   lijst = fs.readFileSync(lijstPad, 'utf8');
 });
 
