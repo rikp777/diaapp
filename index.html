@@ -231,6 +231,23 @@
   .grid-folder:first-child { margin-top: 0; }
   .grid-folder[hidden], .thumb[hidden] { display: none; }
   #gridEmpty { margin: 24px 16px; color: var(--muted); }
+  /* Selecteren (meerdere foto's tegelijk aanpassen) */
+  #grid.selecting .grid-folder { cursor: pointer; color: var(--text); }
+  #grid.selecting .grid-folder:hover { text-decoration: underline; }
+  .thumb.selected { border-color: var(--accent); }
+  #grid.selecting .thumb.current:not(.selected) { border-color: transparent; }
+  .thumb.selected::after {
+    content: "\2713"; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+    display: grid; place-items: center; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 700;
+  }
+  #gridActions {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel-solid);
+  }
+  #gridActions[hidden] { display: none; }
+  #gridSelCount { flex: 1 1 140px; color: var(--muted); }
+  #gridActions .btn { padding: 7px 12px; }
   #gridItems {
     flex: 1; overflow-y: auto; overflow-x: hidden;
     padding: 16px;
@@ -443,12 +460,21 @@
     <div class="grid-head">
       <h2 id="gridTitle">Overzicht</h2>
       <input type="search" id="gridSearch" placeholder="Zoek op naam of map…" aria-label="Zoek op naam of map" autocomplete="off">
+      <button class="btn" id="selectBtn" type="button" aria-pressed="false">Selecteren</button>
       <button class="icon" id="gridClose" type="button" title="Sluiten (Esc)" aria-label="Overzicht sluiten">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>
     <div id="gridItems"></div>
     <p id="gridEmpty" hidden>Niets gevonden.</p>
+    <div id="gridActions" hidden>
+      <span id="gridSelCount" aria-live="polite">Klik op foto's of op een mapnaam om ze te kiezen</span>
+      <button class="btn" id="selAll" type="button">Alles</button>
+      <button class="btn" id="selNone" type="button">Niets</button>
+      <button class="btn primary" id="selHideDate" type="button">Datum verbergen</button>
+      <button class="btn" id="selShowDate" type="button">Datum tonen</button>
+      <button class="btn" id="selDone" type="button">Klaar</button>
+    </div>
   </div>
 </section>
 
@@ -1947,6 +1973,11 @@
 
   function openGrid() {
     if (gridOpen() || !order.length) return;
+    selecting = false;
+    grid.classList.remove('selecting');
+    $('selectBtn').setAttribute('aria-pressed', 'false');
+    $('selectBtn').textContent = 'Selecteren';
+    $('gridActions').hidden = true;
     $('gridSearch').value = '';
     gridWasPlaying = playing;
     if (playing) pausePlayback();
@@ -2023,7 +2054,8 @@
 
   // jumpPos: positie om naartoe te springen (of null); resume: vorige afspeelstand herstellen
   function closeGrid(jumpPos, resume = true) {
-    if (!gridOpen()) return;
+    if (!gridOpen() || bulkBusy) return;
+    if (selecting) setSelecting(false);
     gridClosedAt = performance.now();
     grid.hidden = true;
     grid.classList.remove('open');
@@ -2040,8 +2072,9 @@
       pos = jumpPos;
       display(0);
       toast('Gepauzeerd · T bijschrift · P plek · R draaien · spatie = verder', 2600);
-    } else if (gridWasPlaying) {
-      resumePlayback();
+    } else {
+      showCaption(); // bijwerken (bijvoorbeeld na 'Datum verbergen' voor meerdere foto's)
+      if (gridWasPlaying) resumePlayback();
     }
     const f = gridReturnFocus;
     gridReturnFocus = null;
@@ -2088,8 +2121,95 @@
   grid.addEventListener('click', (e) => e.stopPropagation());
   grid.addEventListener('dblclick', (e) => e.stopPropagation());
   gridItems.addEventListener('click', (e) => {
+    if (selecting) {
+      const h = e.target.closest('.grid-folder');
+      if (h) { toggleFolder(h); return; }
+      const t = e.target.closest('.thumb');
+      if (t) { setSelected(t, !t.classList.contains('selected')); updateSelCount(); }
+      return;
+    }
     const b = e.target.closest('.thumb');
     if (b) closeGrid(Number(b.dataset.pos));
+  });
+
+  // ---------- Selecteren: meerdere foto's tegelijk aanpassen ----------
+  let selecting = false;
+  let bulkBusy = false;
+  function setSelected(t, on) {
+    t.classList.toggle('selected', on);
+    t.setAttribute('aria-pressed', String(on));
+  }
+  const selectedThumbs = () => [...gridItems.querySelectorAll('.thumb.selected')];
+  function updateSelCount() {
+    if (bulkBusy) return;
+    const n = selectedThumbs().length;
+    $('gridSelCount').textContent = n
+      ? `${n} gekozen`
+      : "Klik op foto's of op een mapnaam om ze te kiezen";
+    $('selHideDate').disabled = $('selShowDate').disabled = !n;
+  }
+  function setSelecting(on) {
+    selecting = on;
+    grid.classList.toggle('selecting', on);
+    $('selectBtn').setAttribute('aria-pressed', String(on));
+    $('selectBtn').textContent = on ? 'Stoppen met selecteren' : 'Selecteren';
+    $('gridActions').hidden = !on;
+    for (const h of gridItems.querySelectorAll('.grid-folder')) {
+      if (on) { h.tabIndex = 0; h.setAttribute('role', 'button'); h.title = 'Hele map kiezen'; }
+      else { h.removeAttribute('tabindex'); h.removeAttribute('role'); h.removeAttribute('title'); }
+    }
+    for (const t of gridItems.querySelectorAll('.thumb')) {
+      if (on) t.setAttribute('aria-pressed', 'false'); else { t.classList.remove('selected'); t.removeAttribute('aria-pressed'); }
+    }
+    updateSelCount();
+  }
+  // Mapnaam: alle (zichtbare) foto's in die map kiezen, of allemaal weer uit als ze al gekozen waren
+  function toggleFolder(h) {
+    const thumbs = [];
+    for (let n = h.nextElementSibling; n && n.classList.contains('thumb'); n = n.nextElementSibling) if (!n.hidden) thumbs.push(n);
+    const on = !thumbs.every((t) => t.classList.contains('selected'));
+    for (const t of thumbs) setSelected(t, on);
+    updateSelCount();
+  }
+  async function bulkHideDate(hide) {
+    const thumbs = selectedThumbs();
+    if (!thumbs.length || bulkBusy) return;
+    const items = thumbs.map((t) => media[Number(t.dataset.idx)]);
+    const why = items.map(whyNotWritable).find((w) => w && !w.includes('JPG'));
+    if (why) { toast(why, 3000); return; }
+    const todo = items.filter((m) => isJpeg(m));
+    const skipped = items.length - todo.length;
+    bulkBusy = true;
+    for (const b of $('gridActions').querySelectorAll('button')) b.disabled = true;
+    let done = 0, failed = 0;
+    for (const m of todo) {
+      $('gridSelCount').textContent = `Bezig: ${done + 1} van ${todo.length}…`;
+      try { await changePhoto(m, { hideDate: hide }); } catch { failed++; }
+      done++;
+    }
+    bulkBusy = false;
+    for (const b of $('gridActions').querySelectorAll('button')) b.disabled = false;
+    for (const t of thumbs) setSelected(t, false);
+    updateSelCount();
+    const ok = todo.length - failed;
+    let msg = `${hide ? 'Datum verborgen' : 'Datum weer zichtbaar'} bij ${ok} foto${ok === 1 ? '' : "'s"}`;
+    if (skipped) msg += ` · ${skipped} overgeslagen (geen JPG)`;
+    if (failed) msg += ` · ${failed} mislukt`;
+    $('gridSelCount').textContent = msg;
+    toast(msg, 3500);
+    if (!hide && ok && !settings.showDate) { settings.showDate = true; save(); }
+  }
+  $('selectBtn').onclick = () => setSelecting(!selecting);
+  $('selAll').onclick = () => { for (const t of visibleThumbs()) setSelected(t, true); updateSelCount(); };
+  $('selNone').onclick = () => { for (const t of selectedThumbs()) setSelected(t, false); updateSelCount(); };
+  $('selHideDate').onclick = () => bulkHideDate(true);
+  $('selShowDate').onclick = () => bulkHideDate(false);
+  $('selDone').onclick = () => setSelecting(false);
+  // Toetsenbord: Enter/spatie op een mapnaam kiest de map
+  gridItems.addEventListener('keydown', (e) => {
+    if (selecting && (e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('grid-folder')) {
+      e.preventDefault(); e.stopPropagation(); toggleFolder(e.target);
+    }
   });
   $('gridClose').onclick = () => closeGrid(null);
 
@@ -2216,6 +2336,8 @@
       return;
     }
     if (gridOpen()) {
+      if (bulkBusy) { if (e.key === 'Escape') e.preventDefault(); return; }
+      if (selecting && e.key === 'Escape') { e.preventDefault(); setSelecting(false); return; }
       if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') { e.preventDefault(); closeGrid(null); }
       else if (gridKey(e)) e.preventDefault();
       return; // spatie/Enter bedienen de gefocuste miniatuur
