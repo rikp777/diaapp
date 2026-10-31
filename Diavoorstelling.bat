@@ -71,6 +71,41 @@ function LeesBytes($stream, [int]$aantal) {
   return ,$buf
 }
 
+# Bijschrift, plek en datum voor filmpjes en andere niet-JPG bestanden staan in een
+# verborgen bestandje in de fotomap (de filmpjes zelf worden nooit aangepast)
+$gegevensNaam = 'Diavoorstelling-gegevens.json'
+function Gegevens($stream, $map, $methode, $lengte) {
+  $gp = Join-Path $map $gegevensNaam
+  if ($methode -eq 'GET') {
+    if (Test-Path -LiteralPath $gp) { $data = [IO.File]::ReadAllBytes($gp) } else { $data = [Text.Encoding]::UTF8.GetBytes('{}') }
+    Antwoord $stream 200 'application/json; charset=utf-8' $data
+    return
+  }
+  if ($methode -ne 'POST') { Tekst $stream 400 'Onbekend verzoek'; return }
+  if ($lengte -lt 2 -or $lengte -gt 5000000) { Tekst $stream 413 'Onverwachte grootte'; return }
+  $stream.ReadTimeout = 15000
+  $nieuw = LeesBytes $stream ([int]$lengte)
+  # Alleen geldige JSON opslaan
+  try { $null = ConvertFrom-Json ([Text.Encoding]::UTF8.GetString($nieuw)) } catch { Tekst $stream 400 'Ongeldige gegevens'; return }
+  $tijdelijk = $gp + '.diatmp'
+  try {
+    [IO.File]::WriteAllBytes($tijdelijk, $nieuw)
+    if (Test-Path -LiteralPath $gp) {
+      # Een verborgen bestand kan niet zomaar overschreven worden: eerst zichtbaar maken
+      (Get-Item -LiteralPath $gp -Force).Attributes = [IO.FileAttributes]::Normal
+      try { [IO.File]::Replace($tijdelijk, $gp, $null) }
+      catch { [IO.File]::Copy($tijdelijk, $gp, $true); Remove-Item -LiteralPath $tijdelijk -Force }
+    } else {
+      Move-Item -LiteralPath $tijdelijk -Destination $gp
+    }
+    try { (Get-Item -LiteralPath $gp -Force).Attributes = [IO.FileAttributes]::Hidden } catch {}
+    Tekst $stream 200 'ok'
+  } catch {
+    if (Test-Path -LiteralPath $tijdelijk) { Remove-Item -LiteralPath $tijdelijk -Force -ErrorAction SilentlyContinue }
+    Tekst $stream 500 $_.Exception.Message
+  }
+}
+
 function Verwerk($client, $map, $token) {
   $stream = $client.GetStream()
   # Kort wachten op de kop: browsers openen soms alvast een verbinding zonder verzoek
@@ -107,6 +142,7 @@ function Verwerk($client, $map, $token) {
   if ($q['token'] -ne $token) { Tekst $stream 403 'Geen toegang'; return }
 
   if ($pad -eq '/ping') { Tekst $stream 200 'ok'; return }
+  if ($pad -eq '/gegevens') { Gegevens $stream $map $methode $lengte; return }
   if ($pad -ne '/bestand') { Tekst $stream 404 'Onbekend'; return }
 
   $vol = VeiligPad $map $q['pad']

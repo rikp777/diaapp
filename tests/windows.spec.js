@@ -36,7 +36,15 @@ test.beforeAll(async ({ browser }) => {
   photos = fs.mkdtempSync(path.join(os.tmpdir(), "Foto's van mam #1 "));
   const page = await browser.newPage();
   const plain = await makeJpeg(page, 640, 480, '#2a7');
+  // Een PNG: bijschrift en datum gaan naar het gegevensbestand in de fotomap
+  const png = Buffer.from(await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+    c.getContext('2d').fillRect(0, 0, 100, 100);
+    return c.toDataURL('image/png').split(',')[1];
+  }), 'base64');
   await page.close();
+  fs.writeFileSync(path.join(photos, 'plaatje.png'), png);
+  fs.utimesSync(path.join(photos, 'plaatje.png'), OUDE_DATUM, OUDE_DATUM);
   fs.writeFileSync(path.join(photos, 'tuin.jpg'), withCameraExif(plain, { le: true }));
   fs.mkdirSync(path.join(photos, 'sub map'));
   fs.writeFileSync(path.join(photos, 'sub map', 'strand.jpg'), plain);
@@ -88,7 +96,7 @@ async function openAt(page, name) {
   await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
   await page.keyboard.press('Space'); // pauze
   // Stap voor stap naar de foto, telkens wachten tot de volgende dia er is
-  const order = ['sub map/strand.jpg', 'tuin.jpg'];
+  const order = ['plaatje.png', 'sub map/strand.jpg', 'tuin.jpg'];
   await page.keyboard.press('Home');
   await expect(page.locator('#name')).toHaveText(order[0]);
   for (const n of order.slice(1, order.indexOf(name) + 1)) {
@@ -109,7 +117,7 @@ test('the launcher scans the folder and writes the list with the helper', async 
   expect(token().length).toBeGreaterThanOrEqual(32);
   // Bestandsdatums in dezelfde volgorde als de bestanden
   const times = JSON.parse(/DIASHOW_TIMES = (\[[^\]]*\])/.exec(lijst)[1]);
-  expect(times.length).toBe(3);
+  expect(times.length).toBe(4);
   for (const t of times) expect(Math.abs(t - OUDE_DATUM.getTime())).toBeLessThan(2000);
 });
 
@@ -127,7 +135,7 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   const original = file('tuin.jpg');
   await openAt(page, 'tuin.jpg');
   // Kopie en Live Photo-filmpje komen niet voorbij
-  expect((await page.evaluate(() => /** @type {any} */ (window).diashow.state.order.length))).toBe(2);
+  expect((await page.evaluate(() => /** @type {any} */ (window).diashow.state.order.length))).toBe(3);
   await expect(page.locator('#count')).toContainText('1 dubbele overgeslagen');
   await expect(page.locator('#count')).toContainText('1 Live Photo-filmpje overgeslagen');
   await page.keyboard.press('t');
@@ -159,6 +167,29 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   await expect(page.locator('#toast')).toHaveText('Plek opgeslagen in de foto', { timeout: 15_000 });
   expect(readMeta(file('tuin.jpg')).xpsubject).toBe('Camping De Berk, Ommen');
   expect(readMeta(file('tuin.jpg')).xptitle).toBe('Zo nog even de tuin grasmaaien – één keer');
+});
+
+test('Edge saves a caption for a PNG in the hidden data file via the real helper; file untouched', async ({ page }) => {
+  const original = file('plaatje.png');
+  await openAt(page, 'plaatje.png');
+  await page.keyboard.press('t');
+  await page.keyboard.type('Plaatje – één');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#toast')).toHaveText('Tekst opgeslagen', { timeout: 15_000 });
+  const gp = path.join(photos, 'Diavoorstelling-gegevens.json');
+  expect(JSON.parse(fs.readFileSync(gp, 'utf8')).bestanden['plaatje.png']).toEqual({ caption: 'Plaatje – één' });
+  expect(execFileSync('cmd.exe', ['/c', 'attrib', gp]).toString()).toMatch(/\bH\b/); // verborgen
+  // Nog een keer opslaan: het verborgen bestand moet overschreven kunnen worden
+  await page.keyboard.press('d');
+  await page.check('#hideDateBox');
+  await page.click('#captionEdit button[type=submit]');
+  await expect(page.locator('#date')).toBeHidden();
+  expect(JSON.parse(fs.readFileSync(gp, 'utf8')).bestanden['plaatje.png']).toEqual({ caption: 'Plaatje – één', hideDate: true });
+  expect(execFileSync('cmd.exe', ['/c', 'attrib', gp]).toString()).toMatch(/\bH\b/);
+  expect(file('plaatje.png').equals(original)).toBe(true);
+  // Opnieuw openen: gelezen uit het gegevensbestand
+  await openAt(page, 'plaatje.png');
+  await expect(page.locator('#caption')).toHaveText('Plaatje – één');
 });
 
 test('Edge keeps the screen awake during the show (real Wake Lock)', async ({ page, context }) => {

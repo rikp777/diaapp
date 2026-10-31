@@ -168,17 +168,23 @@ test.describe('tekst en draaien in de JPG-foto', () => {
     } finally { await env.cleanup(); }
   });
 
-  test('not a JPG: text and rotation explain that it only works for JPG photos', async ({ page }) => {
+  test('not a JPG: caption goes to the data file in the folder (file untouched); rotating explains JPG only', async ({ page }) => {
     const env = await setup();
     try {
       const png = env.file('foto1.png');
       await openShow(page, env, 'foto1.png');
       await page.keyboard.press('t');
-      await expect(page.locator('#toast')).toContainText("alleen bij JPG-foto's");
-      await expect(page.locator('#captionEdit')).toBeHidden();
+      await expect(page.locator('#editWhere')).toHaveText('(wordt in de fotomap bewaard)');
+      await page.keyboard.type('Plaatje van de tuin');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#toast')).toHaveText('Tekst opgeslagen');
+      await expect(page.locator('#caption')).toHaveText('Plaatje van de tuin');
+      const data = JSON.parse(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8'));
+      expect(data.bestanden['foto1.png']).toEqual({ caption: 'Plaatje van de tuin' });
       await page.keyboard.press('r');
-      await expect(page.locator('#toast')).toContainText("alleen bij JPG-foto's");
-      expect(env.file('foto1.png').equals(png)).toBe(true);
+      await expect(page.locator('#toast')).toContainText("Draaien kan alleen bij JPG-foto's");
+      expect(env.file('foto1.png').equals(png)).toBe(true); // het bestand zelf is niet aangeraakt
+      expect(fs.existsSync(path.join(env.photos, 'Diavoorstelling-originelen', 'foto1.png'))).toBe(false);
     } finally { await env.cleanup(); }
   });
 
@@ -774,7 +780,7 @@ test.describe('dubbele foto\'s en Live Photos', () => {
 });
 
 test.describe('datum aanpassen', () => {
-  test('D changes the date taken in the photo (time kept); works without an Exif list; PNG explains', async ({ page }) => {
+  test('D changes the date taken in the photo (time kept); works without an Exif list; PNG via the data file', async ({ page }) => {
     const env = await setup();
     try {
       const canon = env.file('canon.jpg');
@@ -795,12 +801,19 @@ test.describe('datum aanpassen', () => {
       expect(imageData(env.file('canon.jpg')).equals(imageData(canon))).toBe(true);
       expect(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-originelen', 'canon.jpg')).equals(canon)).toBe(true);
 
-      // PNG: kan niet
+      // PNG: datum in het gegevensbestand in de fotomap (het bestand zelf blijft gelijk)
+      const png = env.file('foto1.png');
       await page.keyboard.press('ArrowRight');
       await expect(page.locator('#name')).toHaveText('foto1.png');
       await page.keyboard.press('d');
-      await expect(page.locator('#toast')).toContainText("alleen bij JPG-foto's");
-      await expect(page.locator('#captionEdit')).toBeHidden();
+      await expect(page.locator('#dateInput')).toHaveValue('2020-05-01'); // bestandsdatum
+      await page.fill('#dateInput', '2003-03-03');
+      await page.locator('#dateInput').press('Enter');
+      await expect(page.locator('#toast')).toHaveText('Datum opgeslagen');
+      await expect(page.locator('#date')).toHaveText('3 maart 2003');
+      expect(JSON.parse(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8')).bestanden['foto1.png'])
+        .toEqual({ date: '2003-03-03' });
+      expect(env.file('foto1.png').equals(png)).toBe(true);
 
       // Nikon: geen Exif-lijst, Motorola-volgorde, met voorbeeldafbeelding; begint met de bestandsdatum
       const nikon = env.file('nikon.jpg');
@@ -917,7 +930,7 @@ test.describe('datum per foto verbergen', () => {
 });
 
 test.describe('meerdere foto\'s tegelijk', () => {
-  test('select all in the overview and hide the date for all JPGs at once; then show it again for one', async ({ page }) => {
+  test('select all in the overview and hide the date for all at once; then show it again for one', async ({ page }) => {
     const env = await setup();
     try {
       await openShow(page, env, 'canon.jpg');
@@ -929,7 +942,10 @@ test.describe('meerdere foto\'s tegelijk', () => {
       await page.click('#selAll');
       await expect(page.locator('#gridSelCount')).toHaveText('4 gekozen');
       await page.click('#selHideDate');
-      await expect(page.locator('#gridSelCount')).toHaveText("Datum verborgen bij 3 foto's · 1 overgeslagen (geen JPG)");
+      await expect(page.locator('#gridSelCount')).toHaveText("Datum verborgen bij 4 foto's");
+      // De PNG via het gegevensbestand in de fotomap
+      expect(JSON.parse(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8')).bestanden['foto1.png'])
+        .toEqual({ hideDate: true });
       for (const f of ['canon.jpg', 'nikon.jpg', 'zonder-exif.jpg']) {
         expect(readMeta(env.file(f)).labels, f).toContain('Diavoorstelling: geen datum');
         expect(fs.existsSync(path.join(env.photos, 'Diavoorstelling-originelen', f)), f).toBe(true);
@@ -987,6 +1003,85 @@ test.describe('meerdere foto\'s tegelijk', () => {
       await expect(page.locator('#gridSelCount')).toHaveText('Datum verborgen bij 1 foto');
       expect(readMeta(env.file(path.join('Vakantie 2024', 'strand.jpg'))).labels).toBe('Diavoorstelling: geen datum');
       expect(readMeta(env.file(path.join('Vakantie 2024', 'duin.jpg'))).labels).toBe(null);
+    } finally { await env.cleanup(); }
+  });
+});
+
+
+test.describe('filmpjes: gegevensbestand in de fotomap', () => {
+  test('caption, place, date and hiding the date work for a video; kept after reopening; video untouched', async ({ page }) => {
+    const env = await setup();
+    try {
+      fs.copyFileSync(path.join(MEDIA(), 'video.webm'), path.join(env.photos, 'zz-film.webm'));
+      const video = env.file('zz-film.webm');
+      const lijstPad = path.join(path.dirname(new URL(env.url).pathname), 'diashow-lijst.js');
+      const files = ['canon.jpg', 'foto1.png', 'nikon.jpg', 'zonder-exif.jpg', 'zz-film.webm'];
+      fs.writeFileSync(lijstPad, fs.readFileSync(lijstPad, 'utf8')
+        .replace(/DIASHOW_FILES = .*;/, `DIASHOW_FILES = ${JSON.stringify(files)};`)
+        .replace(/DIASHOW_TIMES = .*;/, `DIASHOW_TIMES = ${JSON.stringify(files.map(() => Date.UTC(2020, 4, 1, 12)))};`));
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await page.keyboard.press('Space');
+      await page.keyboard.press('End');
+      await expect(page.locator('#name')).toHaveText('zz-film.webm');
+      await expect(page.locator('#date')).toHaveText('1 mei 2020');
+
+      await page.keyboard.press('t');
+      await expect(page.locator('#editTitle')).toHaveText('Bijschrift bij dit filmpje');
+      await page.keyboard.type('Verjaardag van opa');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#caption')).toHaveText('Verjaardag van opa');
+      await page.keyboard.press('p');
+      await page.fill('#captionInput', 'Ommen');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#place')).toHaveText('Ommen');
+      await page.keyboard.press('d');
+      await page.fill('#dateInput', '1995-06-17');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#date')).toHaveText('17 juni 1995');
+
+      // Bestaande gegevens van andere bestanden blijven staan; het filmpje zelf is niet aangepast
+      const data = JSON.parse(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8'));
+      expect(data.bestanden['zz-film.webm']).toEqual({ caption: 'Verjaardag van opa', place: 'Ommen', date: '1995-06-17' });
+      expect(env.file('zz-film.webm').equals(video)).toBe(true);
+
+      // Datum bij dit filmpje verbergen
+      await page.keyboard.press('d');
+      await page.check('#hideDateBox');
+      await page.click('#captionEdit button[type=submit]');
+      await expect(page.locator('#date')).toBeHidden();
+
+      // Na opnieuw openen: alles uit het gegevensbestand
+      await page.reload();
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await page.keyboard.press('Space');
+      await page.keyboard.press('End');
+      await expect(page.locator('#name')).toHaveText('zz-film.webm');
+      await expect(page.locator('#caption')).toHaveText('Verjaardag van opa');
+      await expect(page.locator('#place')).toHaveText('Ommen');
+      await expect(page.locator('#date')).toBeHidden();
+
+      // Bijschrift weghalen: alleen dat veld verdwijnt
+      await page.keyboard.press('t');
+      await page.fill('#captionInput', '');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#caption')).toHaveText('');
+      expect(JSON.parse(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8')).bestanden['zz-film.webm'])
+        .toEqual({ place: 'Ommen', date: '1995-06-17', hideDate: true });
+    } finally { await env.cleanup(); }
+  });
+
+  test('if the data file cannot be read, nothing is written (existing data stays safe)', async ({ page }) => {
+    const env = await setup();
+    try {
+      fs.writeFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), '{"bestanden":{"foto1.png":{"caption":"Bewaren"}}}');
+      // Het hulpprogramma geeft een fout bij lezen
+      await page.route(/\/gegevens\?/, (route) => (route.request().method() === 'GET' ? route.fulfill({ status: 500, body: 'kapot' }) : route.continue()));
+      await openShow(page, env, 'foto1.png');
+      await page.keyboard.press('t');
+      await expect(page.locator('#toast')).toContainText('Kon de gegevens in de fotomap niet lezen');
+      await expect(page.locator('#captionEdit')).toBeHidden();
+      expect(fs.readFileSync(path.join(env.photos, 'Diavoorstelling-gegevens.json'), 'utf8')).toContain('Bewaren');
     } finally { await env.cleanup(); }
   });
 });
