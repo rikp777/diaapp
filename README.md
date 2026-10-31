@@ -89,6 +89,13 @@ Met `P` (of de speld in de balk) pas je de plek zelf aan; die wordt in de foto
 opgeslagen (Windows: *Onderwerp*). Leegmaken zet de plaatsnaam uit de
 GPS-gegevens terug.
 
+### Geen slaapstand tijdens de voorstelling
+
+Zolang de voorstelling open is (ook gepauzeerd) gaan scherm en computer niet
+in slaapstand en komt de schermbeveiliging niet op. Op het instellingenscherm
+en na het sluiten gelden weer de gewone instellingen van Windows. Uit te
+zetten met **Scherm wakker houden tijdens de voorstelling**.
+
 ### Dubbele foto's en Live Photos
 
 - **Precies dezelfde foto** (bijvoorbeeld in twee mappen, of gekopieerd als

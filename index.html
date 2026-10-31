@@ -346,6 +346,12 @@
         <input type="checkbox" id="showPlace">
       </div>
       <div class="setting">
+        <label for="keepAwake">Scherm wakker houden tijdens de voorstelling
+          <small>Zolang de voorstelling open is gaan scherm en computer niet in slaapstand (ook niet bij pauze)</small>
+        </label>
+        <input type="checkbox" id="keepAwake">
+      </div>
+      <div class="setting">
         <label for="skipLive">Live Photo-filmpjes overslaan
           <small>iPhones bewaren bij een foto vaak ook een kort filmpje met dezelfde naam (IMG_1234.JPG + IMG_1234.MOV). Dat filmpje wordt dan niet getoond.</small>
         </label>
@@ -504,7 +510,7 @@
   const ICON_VIDEO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
 
   // ---------- Instellingen (onthouden in de browser) ----------
-  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showDate: true, showName: false, skipLive: true, volume: 1 };
+  const defaults = { seconds: 5, videoMode: 'full', muted: false, shuffle: false, loop: true, fill: false, kenburns: false, captions: true, showPlace: true, showDate: true, showName: false, skipLive: true, keepAwake: true, volume: 1 };
   const settings = { ...defaults };
   const clampSeconds = (v) => {
     const n = v === '' || v === null ? NaN : Math.round(Number(v));
@@ -524,7 +530,7 @@
   if (!['full', 'interval'].includes(settings.videoMode)) settings.videoMode = defaults.videoMode;
   const save = () => { try { localStorage.setItem('diashow-settings', JSON.stringify(settings)); } catch {} };
 
-  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showDate', 'showName', 'skipLive'];
+  const CHECKS = ['muted', 'shuffle', 'loop', 'fill', 'kenburns', 'captions', 'showPlace', 'showDate', 'showName', 'skipLive', 'keepAwake'];
   function syncStartControls() {
     $('seconds').value = settings.seconds;
     $('videoMode').value = settings.videoMode;
@@ -861,6 +867,32 @@
     }
   }
 
+  // ---------- Scherm wakker houden (Screen Wake Lock) ----------
+  // Zolang de voorstelling open is; de browser laat het los als het venster verborgen wordt,
+  // daarom bij terugkomen opnieuw aanvragen.
+  let wakeLock = null;
+  let wantAwake = false;
+  async function keepAwake(on) {
+    wantAwake = on && settings.keepAwake;
+    try {
+      if (wantAwake && !wakeLock && navigator.wakeLock && document.visibilityState === 'visible') {
+        const lock = await navigator.wakeLock.request('screen');
+        lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+        if (!wantAwake) { await lock.release(); return; } // intussen gestopt
+        wakeLock = lock;
+      } else if (!wantAwake && wakeLock) {
+        const lock = wakeLock;
+        wakeLock = null;
+        await lock.release();
+      }
+    } catch {
+      // Niet beschikbaar of geweigerd: dan gelden gewoon de slaapinstellingen van Windows
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && show.classList.contains('active')) keepAwake(true);
+  });
+
   function start() {
     buildOrder(false);
     if (!order.length) return;
@@ -878,12 +910,14 @@
     display(0);
     pokeUI();
     show.focus({ preventScroll: true });
+    keepAwake(true);
     if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
 
   let showGen = 0; // verhoogd bij stoppen; lopende acties zien zo dat ze moeten ophouden
   function stop() {
     showGen++;
+    keepAwake(false);
     $('captionEdit').hidden = true;
     $('caption').textContent = '';
     $('place').textContent = '';
@@ -2373,7 +2407,7 @@
     value: Object.freeze({
       exif: Exif, // voor tests: metadata lezen/schrijven
       get state() {
-        return { pos, order: [...order], playing, count: media.length, liveUrls: slideUrls.size, source };
+        return { pos, order: [...order], playing, count: media.length, liveUrls: slideUrls.size, awake: !!wakeLock, source };
       },
     }),
     writable: false,
