@@ -835,3 +835,77 @@ test.describe('beeld past altijd binnen het scherm', () => {
   }
 });
 
+
+test.describe('scherm wakker houden', () => {
+  // Nep-Wake Lock die bijhoudt wat de app aanvraagt en loslaat
+  const fakeWakeLock = () => {
+    const log = [];
+    /** @type {any} */ (window).__wake = log;
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: {
+      request: async (type) => {
+        log.push(`aan:${type}`);
+        const listeners = [];
+        const lock = {
+          released: false,
+          addEventListener: (ev, fn) => { if (ev === 'release') listeners.push(fn); },
+          release: async () => { if (!lock.released) { lock.released = true; log.push('uit'); listeners.forEach((f) => f()); } },
+          // de browser laat los als het venster verborgen wordt
+          __browserRelease: () => { lock.released = true; log.push('browser-los'); listeners.forEach((f) => f()); },
+        };
+        /** @type {any} */ (window).__lock = lock;
+        return lock;
+      },
+    } });
+  };
+  const wakeLog = (page) => page.evaluate(() => /** @type {any} */ (window).__wake);
+
+  test('the screen is kept awake during the show, released on the settings screen, and re-requested after hiding', async ({ page }) => {
+    await page.addInitScript(fakeWakeLock);
+    await startShow(page, BASIC);
+    await expect.poll(() => wakeLog(page)).toEqual(['aan:screen']);
+    await page.keyboard.press('Space'); // pauze: blijft wakker
+    expect(await wakeLog(page)).toEqual(['aan:screen']);
+
+    // Browser laat los (venster verborgen) en het venster komt terug: opnieuw aanvragen
+    await page.evaluate(() => {
+      /** @type {any} */ (window).__lock.__browserRelease();
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => wakeLog(page)).toEqual(['aan:screen', 'browser-los', 'aan:screen']);
+
+    // Naar het instellingenscherm: loslaten
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#start')).toBeVisible();
+    await expect.poll(() => wakeLog(page)).toEqual(['aan:screen', 'browser-los', 'aan:screen', 'uit']);
+  });
+
+  test('with the setting off nothing is requested', async ({ page }) => {
+    await page.addInitScript(fakeWakeLock);
+    await openApp(page);
+    await expect(page.locator('#keepAwake')).toBeChecked();
+    await page.uncheck('#keepAwake');
+    await page.setInputFiles('#fileInput', media(...BASIC));
+    await page.click('#startBtn');
+    await expect(page.locator('#name')).toHaveText('foto1.png');
+    await page.waitForTimeout(300);
+    expect(await wakeLog(page)).toEqual([]);
+  });
+
+  test('without Wake Lock support the show still works', async ({ page }) => {
+    await page.addInitScript(() => { Object.defineProperty(navigator, 'wakeLock', { value: undefined }); });
+    await startShow(page, BASIC, { seconds: 1 });
+    await expect(page.locator('#name')).toHaveText('foto2.png', { timeout: 4000 });
+  });
+});
+
+test.describe('scherm wakker houden (echte Wake Lock)', () => {
+  test('with the real API: awake during the show, released on the settings screen', async ({ page, context }) => {
+    // Een browser zonder scherm weigert standaard; een gewone Edge/Chrome staat het toe
+    await context.grantPermissions(['screen-wake-lock']);
+    await startShow(page, BASIC);
+    await expect.poll(async () => (await state(page)).awake).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#start')).toBeVisible();
+    await expect.poll(async () => (await state(page)).awake).toBe(false);
+  });
+});

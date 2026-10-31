@@ -161,6 +161,12 @@ test('Edge saves a caption into the photo via the real helper; backup and date a
   expect(readMeta(file('tuin.jpg')).xptitle).toBe('Zo nog even de tuin grasmaaien – één keer');
 });
 
+test('Edge keeps the screen awake during the show (real Wake Lock)', async ({ page, context }) => {
+  await context.grantPermissions(['screen-wake-lock']);
+  await openAt(page, 'tuin.jpg');
+  await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).diashow.state.awake)).toBe(true);
+});
+
 test('Edge rotates a photo in a subfolder via the real helper', async ({ page }) => {
   const original = file(path.join('sub map', 'strand.jpg'));
   await openAt(page, 'sub map/strand.jpg');
