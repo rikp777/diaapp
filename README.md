@@ -117,6 +117,12 @@ Wil je bij één foto geen datum zien? Zet in hetzelfde venster een vinkje bij
 (Windows: *Labels* → "Diavoorstelling: geen datum"); bestaande labels blijven
 staan. De schakelaar **Datum tonen** geldt voor alle foto's tegelijk.
 
+Voor veel foto's tegelijk: open het overzicht (`G`), klik op **Selecteren**
+en kies foto's (klik erop), een hele map (klik op de mapnaam) of **Alles**
+(alles wat je ziet; werkt samen met het zoekvak). Klik daarna op **Datum
+verbergen** of **Datum tonen**. Foto's die geen JPG zijn worden overgeslagen
+en geteld.
+
 Op het instellingenscherm zet je los van elkaar aan of uit:
 **Bijschrift tonen**, **Plek tonen** (uit = er wordt niets opgezocht),
 **Datum tonen** en **Bestandsnaam tonen** (linksboven, standaard uit).

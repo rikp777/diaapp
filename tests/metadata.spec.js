@@ -915,3 +915,78 @@ test.describe('datum per foto verbergen', () => {
     } finally { await env.cleanup(); }
   });
 });
+
+test.describe('meerdere foto\'s tegelijk', () => {
+  test('select all in the overview and hide the date for all JPGs at once; then show it again for one', async ({ page }) => {
+    const env = await setup();
+    try {
+      await openShow(page, env, 'canon.jpg');
+      await expect(page.locator('#date')).toHaveText('1 juli 2024');
+      await page.keyboard.press('g');
+      await page.click('#selectBtn');
+      await expect(page.locator('#gridActions')).toBeVisible();
+      await expect(page.locator('#selHideDate')).toBeDisabled();
+      await page.click('#selAll');
+      await expect(page.locator('#gridSelCount')).toHaveText('4 gekozen');
+      await page.click('#selHideDate');
+      await expect(page.locator('#gridSelCount')).toHaveText("Datum verborgen bij 3 foto's · 1 overgeslagen (geen JPG)");
+      for (const f of ['canon.jpg', 'nikon.jpg', 'zonder-exif.jpg']) {
+        expect(readMeta(env.file(f)).labels, f).toContain('Diavoorstelling: geen datum');
+        expect(fs.existsSync(path.join(env.photos, 'Diavoorstelling-originelen', f)), f).toBe(true);
+      }
+      expect(readMeta(env.file('canon.jpg')).labels).toBe('Vakantie;Strand;Diavoorstelling: geen datum');
+      expect(readMeta(env.file('canon.jpg')).dateOriginal).toBe('2024:07:01 11:59:58');
+
+      // Overzicht sluiten: de foto in beeld toont geen datum meer
+      await page.keyboard.press('Escape'); // stoppen met selecteren
+      await expect(page.locator('#gridActions')).toBeHidden();
+      await page.keyboard.press('Escape'); // overzicht dicht
+      await expect(page.locator('#grid')).toBeHidden();
+      await expect(page.locator('#place')).toHaveText('Utrecht');
+      await expect(page.locator('#date')).toBeHidden();
+
+      // Eén foto weer tonen
+      await page.keyboard.press('g');
+      await page.click('#selectBtn');
+      await page.locator('.thumb[data-pos="2"]').click(); // nikon.jpg
+      await expect(page.locator('.thumb[data-pos="2"]')).toHaveClass(/\bselected\b/);
+      await expect(page.locator('#gridSelCount')).toHaveText('1 gekozen');
+      await page.click('#selShowDate');
+      await expect(page.locator('#gridSelCount')).toHaveText('Datum weer zichtbaar bij 1 foto');
+      expect(readMeta(env.file('nikon.jpg')).labels).toBe(null);
+      expect(readMeta(env.file('zonder-exif.jpg')).labels).toBe('Diavoorstelling: geen datum');
+      expect(readMeta(env.file('canon.jpg')).labels).toBe('Vakantie;Strand;Diavoorstelling: geen datum');
+    } finally { await env.cleanup(); }
+  });
+
+  test('a folder name selects that whole folder; works together with search', async ({ page }) => {
+    const env = await setup();
+    try {
+      fs.mkdirSync(path.join(env.photos, 'Vakantie 2024'));
+      fs.copyFileSync(path.join(MEDIA(), 'zonder-exif.jpg'), path.join(env.photos, 'Vakantie 2024', 'strand.jpg'));
+      fs.copyFileSync(path.join(MEDIA(), 'nikon.jpg'), path.join(env.photos, 'Vakantie 2024', 'duin.jpg'));
+      const lijstPad = path.join(path.dirname(new URL(env.url).pathname), 'diashow-lijst.js');
+      const files = ['canon.jpg', 'foto1.png', 'nikon.jpg', 'Vakantie 2024/duin.jpg', 'Vakantie 2024/strand.jpg', 'zonder-exif.jpg'];
+      fs.writeFileSync(lijstPad, fs.readFileSync(lijstPad, 'utf8')
+        .replace(/DIASHOW_FILES = .*;/, `DIASHOW_FILES = ${JSON.stringify(files)};`)
+        .replace(/DIASHOW_TIMES = .*;/, `DIASHOW_TIMES = ${JSON.stringify(files.map(() => 0))};`));
+      await page.goto(env.url);
+      await expect(page.locator('#show')).toHaveClass(/\bactive\b/);
+      await page.keyboard.press('g');
+      await page.click('#selectBtn');
+      await page.locator('.grid-folder', { hasText: 'Vakantie 2024' }).click();
+      await expect(page.locator('#gridSelCount')).toHaveText('2 gekozen');
+      await page.locator('.grid-folder', { hasText: 'Vakantie 2024' }).click(); // nog eens: weer uit
+      await expect(page.locator('#gridSelCount')).not.toContainText('gekozen');
+
+      // Zoeken + Alles: alleen wat zichtbaar is
+      await page.fill('#gridSearch', 'strand');
+      await page.click('#selAll');
+      await expect(page.locator('#gridSelCount')).toHaveText('1 gekozen');
+      await page.click('#selHideDate');
+      await expect(page.locator('#gridSelCount')).toHaveText('Datum verborgen bij 1 foto');
+      expect(readMeta(env.file(path.join('Vakantie 2024', 'strand.jpg'))).labels).toBe('Diavoorstelling: geen datum');
+      expect(readMeta(env.file(path.join('Vakantie 2024', 'duin.jpg'))).labels).toBe(null);
+    } finally { await env.cleanup(); }
+  });
+});
