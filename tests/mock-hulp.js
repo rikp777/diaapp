@@ -17,6 +17,20 @@ function startMockHulp(map, token, { failWrites = false, writeDelay = 0 } = {}) 
     if (req.method === 'OPTIONS') return send(204, '');
     if (url.searchParams.get('token') !== token) return send(403, 'Geen toegang');
     if (url.pathname === '/ping') return send(200, 'ok');
+    if (url.pathname === '/gegevens') {
+      const gp = path.join(map, 'Diavoorstelling-gegevens.json');
+      if (req.method === 'GET') return send(200, fs.existsSync(gp) ? fs.readFileSync(gp) : '{}', 'application/json; charset=utf-8');
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        if (failWrites) return send(500, 'Schijf is alleen-lezen');
+        const body = Buffer.concat(chunks);
+        try { JSON.parse(body.toString('utf8')); } catch { return send(400, 'Ongeldige gegevens'); }
+        fs.writeFileSync(gp, body);
+        send(200, 'ok');
+      });
+      return;
+    }
     if (url.pathname !== '/bestand') return send(404, 'Onbekend');
     const rel = url.searchParams.get('pad') || '';
     const full = path.resolve(map, rel);

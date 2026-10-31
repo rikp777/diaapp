@@ -70,8 +70,10 @@ GPS-gegevens blijven behouden. De datum van het bestand blijft ook gelijk.
 
 - **Reservekopie:** voor de eerste wijziging aan een foto wordt het origineel
   bewaard in de verborgen map `Diavoorstelling-originelen` in de fotomap.
-- **Alleen JPG-foto's** (bijna alle camera- en telefoonfoto's). Bij filmpjes en
-  andere bestanden legt de app uit dat het niet kan.
+- **Filmpjes en andere bestanden** (MP4, MOV, PNG, …) worden nooit aangepast.
+  Hun bijschrift, plek en datum (en "datum niet tonen") worden bewaard in het
+  verborgen bestand `Diavoorstelling-gegevens.json` in de fotomap; dat gaat mee
+  als je de map kopieert. Draaien (`R`) kan alleen bij JPG-foto's.
 - **Alleen via `Diavoorstelling.bat`:** een browser mag zelf geen bestanden
   aanpassen. Het startbestand start daarom op de achtergrond een klein
   hulpprogramma dat alleen vanaf deze computer bereikbaar is (127.0.0.1, met

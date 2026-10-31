@@ -398,7 +398,7 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <form id="captionEdit" hidden>
-    <label for="captionInput"><span id="editTitle">Bijschrift bij deze foto</span> <small style="display:inline;font-weight:400">(wordt in de foto opgeslagen)</small></label>
+    <label for="captionInput"><span id="editTitle">Bijschrift bij deze foto</span> <small id="editWhere" style="display:inline;font-weight:400">(wordt in de foto opgeslagen)</small></label>
     <textarea id="captionInput" rows="2" maxlength="300" placeholder="Bijvoorbeeld: zo nog even de tuin grasmaaien"></textarea>
     <input type="date" id="dateInput" min="1826-01-01" max="2999-12-31" aria-label="Datum" hidden>
     <label id="hideDateRow" hidden><input type="checkbox" id="hideDateBox"> Datum bij deze foto niet tonen</label>
@@ -683,6 +683,7 @@
   async function setFiles(files) {
     const gen = ++loadGen;
     metaCache.clear();
+    gegevens = null;
     revokeAllSlideUrls();
     media = [];
     source = 'bestanden';
@@ -714,6 +715,7 @@
   async function setList(paths) {
     const gen = ++loadGen;
     metaCache.clear();
+    await loadGegevens();
     revokeAllSlideUrls();
     source = 'lijst';
     // Bestandsdatums (ms) uit de Windows-starter, in dezelfde volgorde als de paden
@@ -1637,7 +1639,6 @@
   const helper = typeof window.DIASHOW_SERVER === 'string' && typeof window.DIASHOW_TOKEN === 'string'
     ? { url: window.DIASHOW_SERVER.replace(/\/$/, ''), token: window.DIASHOW_TOKEN } : null;
   const isJpeg = (m) => !!m && m.type === 'image' && /\.(jpe?g|jfif)$/i.test(m.path);
-  const canWrite = (m) => isJpeg(m) && !!helper && source === 'lijst';
   const helperUrl = (what, m, extra = '') =>
     `${helper.url}/${what}?token=${encodeURIComponent(helper.token)}${m ? `&pad=${encodeURIComponent(m.path)}` : ''}${extra}`;
   // Houdt het hulpprogramma in leven zolang de voorstelling open is
@@ -1661,7 +1662,55 @@
     if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
     return new Uint8Array(await r.arrayBuffer());
   }
+  // ---------- Gegevens voor filmpjes en andere niet-JPG bestanden ----------
+  // In het verborgen bestand Diavoorstelling-gegevens.json in de fotomap (via het hulpprogramma);
+  // de bestanden zelf worden niet aangepast. Sleutel: het pad in de fotomap.
+  let gegevens = null;       // { versie, bestanden: { pad: { caption, place, date, hideDate } } }
+  let gegevensFout = false;  // niet kunnen lezen: dan ook niet schrijven (anders gaat er iets verloren)
+  async function loadGegevens() {
+    gegevens = null;
+    gegevensFout = false;
+    if (!helper) return;
+    try {
+      const r = await helperFetch(helperUrl('gegevens'), { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      gegevens = j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+      if (!gegevens.bestanden || typeof gegevens.bestanden !== 'object') gegevens.bestanden = {};
+    } catch { gegevensFout = true; }
+  }
+  function sidecarMeta(m) {
+    const e = (gegevens && gegevens.bestanden[m.path]) || {};
+    const str = (v) => (typeof v === 'string' ? v.trim() : '');
+    return {
+      caption: str(e.caption), place: str(e.place), gps: null, orientation: 1, hasExif: false,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(e.date || '') ? e.date : '', hideDate: e.hideDate === true,
+    };
+  }
+  async function changeGegevens(m, changes) {
+    const e = { ...(gegevens.bestanden[m.path] || {}) };
+    for (const k of ['caption', 'place']) {
+      if (typeof changes[k] !== 'string') continue;
+      const v = changes[k].trim();
+      if (v) e[k] = v; else delete e[k];
+    }
+    if (typeof changes.date === 'string' && changes.date) e.date = changes.date;
+    if (changes.hideDate === true) e.hideDate = true;
+    if (changes.hideDate === false) delete e.hideDate;
+    const next = { ...gegevens, versie: 1, bestanden: { ...gegevens.bestanden } };
+    if (Object.keys(e).length) next.bestanden[m.path] = e; else delete next.bestanden[m.path];
+    if (JSON.stringify(next.bestanden) !== JSON.stringify(gegevens.bestanden)) {
+      const r = await helperFetch(helperUrl('gegevens'), {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(next, null, 1),
+      });
+      if (!r.ok) throw new Error((await r.text().catch(() => '')) || `fout ${r.status}`);
+      gegevens = next;
+    }
+    return sidecarMeta(m);
+  }
+
   async function metaOf(m) {
+    if (m && !isJpeg(m)) return gegevens ? sidecarMeta(m) : null;
     if (!isJpeg(m)) return null;
     if (metaCache.has(metaKey(m))) return metaCache.get(metaKey(m));
     let meta = null;
@@ -1751,8 +1800,8 @@
   // Waarom tekst/draaien hier niet kan, of '' als het wel kan
   function whyNotWritable(m) {
     if (!m) return 'Geen foto';
-    if (!isJpeg(m)) return "Bijschrift, plek, datum en draaien kan alleen bij JPG-foto's";
-    if (!canWrite(m)) return 'Opslaan in de foto kan alleen als je de diavoorstelling start met Diavoorstelling.bat';
+    if (!helper || source !== 'lijst') return 'Opslaan kan alleen als je de diavoorstelling start met Diavoorstelling.bat';
+    if (!isJpeg(m) && (gegevensFout || !gegevens)) return 'Kon de gegevens in de fotomap niet lezen. Start Diavoorstelling.bat opnieuw';
     return '';
   }
 
@@ -1760,6 +1809,10 @@
   let writeQueue = Promise.resolve();
   function changePhoto(m, changes) {
     const job = writeQueue.then(async () => {
+      if (!isJpeg(m)) {
+        if (changes.orientation) throw new Error("draaien kan alleen bij JPG-foto's");
+        return changeGegevens(m, changes);
+      }
       const bytes = await fileBytes(m, false);
       const now = Exif.read(bytes);
       const same = (typeof changes.caption !== 'string' || now.caption === changes.caption.trim()) &&
@@ -1803,8 +1856,10 @@
     if (playing) pausePlayback();
     pokeUI();
     const isPlace = field === 'place', isDate = field === 'date';
-    $('editTitle').textContent = isDate ? 'Datum waarop deze foto gemaakt is'
-      : isPlace ? 'Plek waar deze foto gemaakt is' : 'Bijschrift bij deze foto';
+    const wat = m.type === 'video' ? 'dit filmpje' : 'deze foto';
+    $('editTitle').textContent = isDate ? `Datum waarop ${wat} gemaakt is`
+      : isPlace ? `Plek waar ${wat} gemaakt is` : `Bijschrift bij ${wat}`;
+    $('editWhere').textContent = isJpeg(m) ? '(wordt in de foto opgeslagen)' : '(wordt in de fotomap bewaard)';
     $('editHint').textContent = isDate
       ? 'Kies een dag en druk op Enter of Opslaan · Esc = annuleren · de tijd van de foto blijft hetzelfde'
       : isPlace
@@ -1857,6 +1912,7 @@
     const text = $('captionInput').value.trim();
     const date = $('dateInput').value;
     const hide = $('hideDateBox').checked;
+    const waar = m && isJpeg(m) ? ' in de foto' : '';
     $('captionEdit').hidden = true;
     show.focus({ preventScroll: true });
     if (saveIt && m) {
@@ -1871,16 +1927,16 @@
             await changePhoto(m, changes);
             if (!hide && !settings.showDate) { settings.showDate = true; save(); }
             toast(changes.hideDate === true ? 'Datum wordt bij deze foto niet getoond'
-              : changes.date ? 'Datum opgeslagen in de foto' : 'Datum wordt bij deze foto weer getoond');
+              : changes.date ? `Datum opgeslagen${waar}` : 'Datum wordt bij deze foto weer getoond');
           }
         } else if (editField === 'place') {
           await changePhoto(m, { place: text });
           if (text && !settings.showPlace) { settings.showPlace = true; save(); }
-          toast(text ? 'Plek opgeslagen in de foto' : 'Plek weggehaald');
+          toast(text ? `Plek opgeslagen${waar}` : 'Plek weggehaald');
         } else {
           await changePhoto(m, { caption: text });
           if (text && !settings.captions) { settings.captions = true; save(); }
-          toast(text ? 'Tekst opgeslagen in de foto' : 'Tekst weggehaald');
+          toast(text ? `Tekst opgeslagen${waar}` : 'Tekst weggehaald');
         }
       } catch (err) {
         toast(`Kon de foto niet opslaan: ${err.message}`, 4000);
@@ -1893,6 +1949,7 @@
 
   async function rotatePhoto() {
     const m = currentMedia();
+    if (m && !isJpeg(m)) { toast("Draaien kan alleen bij JPG-foto's", 2500); return; }
     const why = whyNotWritable(m);
     if (why) { toast(why, 2500); return; }
     // Niet doorschuiven terwijl we draaien
@@ -2209,10 +2266,10 @@
     const thumbs = selectedThumbs();
     if (!thumbs.length || bulkBusy) return;
     const items = thumbs.map((t) => media[Number(t.dataset.idx)]);
-    const why = items.map(whyNotWritable).find((w) => w && !w.includes('JPG'));
+    const why = items.map(whyNotWritable).find(Boolean);
     if (why) { toast(why, 3000); return; }
-    const todo = items.filter((m) => isJpeg(m));
-    const skipped = items.length - todo.length;
+    const todo = items;
+    const skipped = 0;
     bulkBusy = true;
     for (const b of $('gridActions').querySelectorAll('button')) b.disabled = true;
     let done = 0, failed = 0;
