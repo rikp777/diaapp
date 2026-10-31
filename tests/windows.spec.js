@@ -44,6 +44,7 @@ test.beforeAll(async ({ browser }) => {
   }), 'base64');
   await page.close();
   fs.writeFileSync(path.join(photos, 'plaatje.png'), png);
+  fs.utimesSync(path.join(photos, 'plaatje.png'), OUDE_DATUM, OUDE_DATUM);
   fs.writeFileSync(path.join(photos, 'tuin.jpg'), withCameraExif(plain, { le: true }));
   fs.mkdirSync(path.join(photos, 'sub map'));
   fs.writeFileSync(path.join(photos, 'sub map', 'strand.jpg'), plain);
